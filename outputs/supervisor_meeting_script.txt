@@ -1,0 +1,65 @@
+SUPERVISOR MEETING SCRIPT (2-3 minutes)
+========================================
+
+[INTRO - 15 seconds]
+
+My thesis topic is "Durable Reverse Top-k Queries on Time-Varying
+Preferences."  The goal is to efficiently find users who consistently
+rank a query item among their least-preferred items across multiple
+time windows.
+
+[WHAT I IMPLEMENTED - 30 seconds]
+
+I implemented methods from two base papers:
+
+First, an approximate reverse k-ranks method that uses pre-built rank
+tables to quickly estimate item rankings per user.  I validated this on
+MovieLens and got a 30x speedup with 98% recall.
+
+Second, two exact durable verification methods called SSA and PRA that
+check whether a user qualifies across enough time windows.
+
+Then I combined them into a hybrid pipeline: a fast filter to prune
+users, followed by exact verification on the survivors only.
+
+[LEVEL 1 RESULT - 15 seconds]
+
+The static Level 1 validation on MovieLens showed the rank table
+approach works well: 30x faster than brute force with 98% accuracy.
+This confirmed the foundation is solid.
+
+[LEVEL 2 ISSUE - 30 seconds]
+
+When I moved to the temporal Level 2, the hybrid pipeline had a recall
+problem.  The candidate filter was only recovering about 60% of the
+correct results, even when I increased the number of candidates from
+15 up to 300 out of 610 users.
+
+After investigation, I found the root cause was a semantic mismatch.
+The durable verifier checks for users where the query item scores
+WORST -- bottom-k semantics.  But my filter was selecting users where
+the query item scores BEST.  So it was filtering in the exact wrong
+direction.
+
+[THE FIX - 20 seconds]
+
+I created a new filter called MinRank that correctly selects users
+where the query item has the highest rank from the top -- meaning it
+scored poorly for those users.  This aligns with the bottom-k
+verification condition.
+
+[FINAL RESULT - 20 seconds]
+
+With MinRank, the hybrid pipeline now achieves 100% recall, prunes
+97.5% of users, and runs 3.5 to 3.9 times faster than the full
+methods.  The robustness study confirms this holds across different
+values of k, tau, c, and L.
+
+[WHAT I WANT TO DISCUSS - 15 seconds]
+
+I would like your feedback on three things:
+1. Whether the current experimental evidence is sufficient for the
+   thesis, or should I test on larger datasets?
+2. Whether the filter ablation showing the semantic mismatch is
+   worth highlighting as a contribution.
+3. What additional analysis or writing you would like to see next.

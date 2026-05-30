@@ -1,0 +1,5 @@
+Parameter,Value,Method,Runtime,Candidates,Results,PruningRatio,Recall
+real,N/A,Full_SSA,0.05854392051696777,500,0,0.0,1.0
+real,N/A,Full_PRA,0.06086015701293945,500,0,0.0,1.0
+real,N/A,Hybrid_SSA,0.0020384788513183594,15,0,0.97,1.0
+real,N/A,Hybrid_PRA,0.0018041133880615234,15,0,0.97,1.0

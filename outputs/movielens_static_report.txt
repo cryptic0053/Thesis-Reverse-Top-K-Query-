@@ -1,0 +1,13 @@
+Shape of U: (610, 32)
+Shape of P: (9724, 32)
+Factorization dimension: 32
+Rank table build time: 4.6144s
+Brute-force average runtime: 0.0609s
+Approximate average runtime: 0.0020s
+Recall / overlap at k=10: 0.9800
+Exact CSV paths:
+  - D:\4-1\Lab\CSE 4000 Project  Thesis\thesis_project\outputs\csv\movielens_static\runtime_compare.csv
+  - D:\4-1\Lab\CSE 4000 Project  Thesis\thesis_project\outputs\csv\movielens_static\accuracy_compare.csv
+Exact plot paths:
+  - D:\4-1\Lab\CSE 4000 Project  Thesis\thesis_project\outputs\plots\movielens_static\runtime_bar.png
+  - D:\4-1\Lab\CSE 4000 Project  Thesis\thesis_project\outputs\plots\movielens_static\recall_vs_k.png

@@ -1,0 +1,50 @@
+SUPERVISOR MEETING -- TALKING POINTS
+=====================================
+Durable Reverse Top-k on Time-Varying Preferences (Level 2 Temporal)
+
+1. WHAT WE BUILT
+   - Two-level hybrid pipeline: fast candidate filter + exact durable verifier (SSA/PRA)
+   - Evaluated on MovieLens: 610 users, 9724 items, 5 time windows, d=32
+
+2. THE INITIAL PROBLEM
+   - First filter (GlobalAvg) gave only ~60% recall, even with 300 candidates out of 610
+   - Second attempt (UnionWin, per-window tables) had the same 60% recall plateau
+   - Increasing the looseness parameter c from 1.5 to 30 did not help
+
+3. ROOT CAUSE DISCOVERED
+   - Semantic mismatch between filter and verifier
+   - Verifier uses BOTTOM-k semantics (user qualifies when query item scores WORST)
+   - Old filters selected users where query item scores BEST (opposite direction)
+   - This caused true positives to be systematically pruned away
+
+4. THE FIX: MINRANK FILTER
+   - Computes exact rank of query item per user per window
+   - Keeps maximum rank across windows (worst-case for query item)
+   - Selects users with highest max-rank (query item likely in bottom-k)
+   - Correctly aligns with SSA/PRA verification condition
+
+5. FINAL RESULTS (BEST SETTING)
+   - Method: Hybrid + PRA (MinRank)
+   - Recall: 100% (perfect match with Full SSA ground truth)
+   - Pruning: 97.5% (only 15 of 610 users pass to verifier)
+   - Speedup: 3.9x over Full SSA
+   - Parameters: k=10, tau=0.6, c=1.5, L=5, d=32
+
+6. ROBUSTNESS
+   - Tested k={5,10,20}, tau={0.4,0.6,0.8}, c={1.5,2.0,3.0}, L={3,5,10}, d={16,32,64}
+   - Recall = 1.00 for all k>=10, all tau, all c, all L at d=32
+   - k=5 shows 0.80 recall (only 7 candidates, c=2.0 would fix this)
+   - d=16 and d=64 show slight recall changes (embedding quality, not filter issue)
+   - Runtime scales linearly with L
+
+7. KEY CONTRIBUTION
+   - The fix was SEMANTIC, not architectural
+   - No changes to SSA or PRA verifier logic were needed
+   - Only the filter direction was corrected
+   - Proves the importance of aligning approximate and exact components
+
+8. NEXT STEPS (TO DISCUSS)
+   - Scale to larger datasets (MovieLens 1M, 25M)?
+   - Test with other embedding methods (NMF, neural)?
+   - Write up the filter ablation as a thesis section?
+   - Compare with related work on approximate durable queries?
