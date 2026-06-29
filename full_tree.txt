@@ -1,0 +1,251 @@
+Folder PATH listing for volume New Volume
+Volume serial number is 00000070 9EDE:6D44
+D:.
+|   full_tree.txt
+|   main.py
+|   README.md
+|   
++---baselines
+|   +---approximate
+|   |   |   build_rank_table.py
+|   |   |   reverse_k_rank_approx.py
+|   |   |   reverse_k_rank_bruteforce.py
+|   |   |   
+|   |   \---__pycache__
+|   |           build_rank_table.cpython-314.pyc
+|   |           reverse_k_rank_approx.cpython-314.pyc
+|   |           reverse_k_rank_bruteforce.cpython-314.pyc
+|   |           
+|   \---durable
+|       |   pra.py
+|       |   ssa.py
+|       |   
+|       \---__pycache__
+|               pra.cpython-314.pyc
+|               ssa.cpython-314.pyc
+|               
++---data
+|   |   common_data.py
+|   |   
+|   +---processed
+|   |   +---movielens
+|   |   |       item_id_map.csv
+|   |   |       P_item_vectors.npy
+|   |   |       user_id_map.csv
+|   |   |       U_user_vectors.npy
+|   |   |       W_temporal_vectors.npy
+|   |   |       
+|   |   \---netflix
+|   |           item_id_map.csv
+|   |           P_item_vectors.npy
+|   |           ratings_subset.csv
+|   |           user_id_map.csv
+|   |           U_user_vectors.npy
+|   |           W_temporal_vectors.npy
+|   |           
+|   +---raw
+|   |   +---movielens
+|   |   |       links.csv
+|   |   |       movies.csv
+|   |   |       ratings.csv
+|   |   |       README.txt
+|   |   |       tags.csv
+|   |   |       
+|   |   \---Netflix
+|   |           combined_data_1.txt
+|   |           combined_data_2.txt
+|   |           combined_data_3.txt
+|   |           combined_data_4.txt
+|   |           movie_titles.csv
+|   |           probe.txt
+|   |           qualifying.txt
+|   |           README
+|   |           
+|   \---__pycache__
+|           common_data.cpython-314.pyc
+|           
++---experiments
+|       generate_plots.py
+|       run_accuracy_compare.py
+|       run_movielens_static.py
+|       run_movielens_temporal.py
+|       run_movielens_temporal_minrank.py
+|       run_movielens_temporal_robustness.py
+|       run_netflix_static.py
+|       run_netflix_temporal.py
+|       run_one_query_demo.py
+|       run_real_validation.py
+|       run_runtime_compare.py
+|       run_scalability.py
+|       run_temporal_filter_compare.py
+|       test_data_modes.py
+|       
++---hybrid
+|   |   candidate_filter.py
+|   |   durable_verifier.py
+|   |   hybrid_sdr_topk.py
+|   |   
+|   \---__pycache__
+|           candidate_filter.cpython-314.pyc
+|           durable_verifier.cpython-314.pyc
+|           hybrid_sdr_topk.cpython-314.pyc
+|           
++---outputs
+|   |   final_experimental_summary.md
+|   |   movielens_static_report.txt
+|   |   movielens_temporal_ablation_summary.md
+|   |   movielens_temporal_final_summary.md
+|   |   movielens_temporal_final_summary_extended.md
+|   |   netflix_static_report.txt
+|   |   netflix_summary.md
+|   |   P_item_vectors.npy
+|   |   rank_table_T_tau500.npy
+|   |   results_discussion_draft.txt
+|   |   supervisor_discussion_pack.md
+|   |   supervisor_meeting_script.txt
+|   |   supervisor_meeting_summary.md
+|   |   supervisor_meeting_talking_points.txt
+|   |   thesis_summary.md
+|   |   thresholds_tau500.npy
+|   |   U_user_vectors.npy
+|   |   
+|   +---csv
+|   |   |   parameter_sweep.csv
+|   |   |   runtime_compare.csv
+|   |   |   scalability_results.csv
+|   |   |   
+|   |   +---CL
+|   |   |       parameter_sweep.csv
+|   |   |       runtime_compare.csv
+|   |   |       scalability_results.csv
+|   |   |       
+|   |   +---movielens_static
+|   |   |       accuracy_compare.csv
+|   |   |       runtime_compare.csv
+|   |   |       
+|   |   +---movielens_temporal
+|   |   |       per_query_results.csv
+|   |   |       runtime_compare.csv
+|   |   |       
+|   |   +---movielens_temporal_filter_compare
+|   |   |       filter_strategy_compare.csv
+|   |   |       
+|   |   +---movielens_temporal_final
+|   |   |       final_summary_table.csv
+|   |   |       per_query_results.csv
+|   |   |       runtime_compare.csv
+|   |   |       
+|   |   +---movielens_temporal_robustness
+|   |   |       robustness_all.csv
+|   |   |       robustness_c.csv
+|   |   |       robustness_d.csv
+|   |   |       robustness_k.csv
+|   |   |       robustness_L.csv
+|   |   |       robustness_tau.csv
+|   |   |       
+|   |   +---netflix_static
+|   |   |       accuracy_compare.csv
+|   |   |       runtime_compare.csv
+|   |   |       
+|   |   +---netflix_temporal
+|   |   |       per_query_results.csv
+|   |   |       runtime_compare.csv
+|   |   |       
+|   |   +---real
+|   |   |       real_validation.csv
+|   |   |       
+|   |   +---synthetic_cl
+|   |   |       parameter_sweep.csv
+|   |   |       runtime_compare.csv
+|   |   |       scalability_results.csv
+|   |   |       
+|   |   +---synthetic_un
+|   |   |       parameter_sweep.csv
+|   |   |       runtime_compare.csv
+|   |   |       scalability_results.csv
+|   |   |       
+|   |   \---UN
+|   |           parameter_sweep.csv
+|   |           runtime_compare.csv
+|   |           scalability_results.csv
+|   |           
+|   +---logs
+|   \---plots
+|       |   pruning_vs_users.png
+|       |   recall_vs_c.png
+|       |   runtime_comparison.png
+|       |   runtime_vs_timestamps.png
+|       |   runtime_vs_users.png
+|       |   
+|       +---CL
+|       |       pruning_vs_users.png
+|       |       recall_vs_c.png
+|       |       runtime_comparison.png
+|       |       runtime_vs_timestamps.png
+|       |       runtime_vs_users.png
+|       |       
+|       +---movielens_static
+|       |       recall_vs_k.png
+|       |       runtime_bar.png
+|       |       
+|       +---movielens_temporal
+|       |       pruning_bar.png
+|       |       recall_bar.png
+|       |       runtime_bar.png
+|       |       
+|       +---movielens_temporal_filter_compare
+|       |       pruning_vs_strategy.png
+|       |       recall_vs_strategy.png
+|       |       runtime_vs_strategy.png
+|       |       
+|       +---movielens_temporal_final
+|       |       pruning_bar.png
+|       |       recall_bar.png
+|       |       runtime_bar.png
+|       |       
+|       +---movielens_temporal_robustness
+|       |       pruning_vs_c.png
+|       |       recall_vs_k.png
+|       |       recall_vs_tau.png
+|       |       runtime_vs_d.png
+|       |       runtime_vs_k.png
+|       |       runtime_vs_L.png
+|       |       runtime_vs_tau.png
+|       |       
+|       +---netflix_static
+|       |       recall_vs_k.png
+|       |       runtime_bar.png
+|       |       
+|       +---netflix_temporal
+|       |       pruning_bar.png
+|       |       recall_bar.png
+|       |       runtime_bar.png
+|       |       
+|       +---synthetic_cl
+|       |       pruning_vs_users.png
+|       |       recall_vs_c.png
+|       |       runtime_comparison.png
+|       |       runtime_vs_timestamps.png
+|       |       runtime_vs_users.png
+|       |       
+|       +---synthetic_un
+|       |       pruning_vs_users.png
+|       |       recall_vs_c.png
+|       |       runtime_comparison.png
+|       |       runtime_vs_timestamps.png
+|       |       runtime_vs_users.png
+|       |       
+|       \---UN
+|               pruning_vs_users.png
+|               recall_vs_c.png
+|               runtime_comparison.png
+|               runtime_vs_timestamps.png
+|               runtime_vs_users.png
+|               
+\---utils
+    |   helpers.py
+    |   rank_table.py
+    |   
+    \---__pycache__
+            rank_table.cpython-314.pyc
+            

@@ -36,15 +36,12 @@ def overlap_count(runs, tb, te_excl):
             cnt += (right - left + 1)
     return cnt
 
-def _verify_parent_child(runsP, runsC, L, trials=20):
-    for _ in range(trials):
-        a = random.randint(0, L-1)
-        b = random.randint(a+1, L)
-        if overlap_count(runsP, a, b) < overlap_count(runsC, a, b):
-            return False
-    return True
 
-def build_pra_forest(runs_per_user, L, do_verify=True):
+def build_pra_forest(runs_per_user, L):
+    """
+    Builds the PRA containment forest.
+    O(m^2) distance computation based on run inclusions.
+    """
     m = len(runs_per_user)
     bit_counts = [total_ones(r) for r in runs_per_user]
     active = [u for u in range(m) if bit_counts[u] > 0]
@@ -68,9 +65,6 @@ def build_pra_forest(runs_per_user, L, do_verify=True):
                 continue
 
             if includes(runs_per_user[p], runs_per_user[v]):
-                if do_verify and not _verify_parent_child(runs_per_user[p], runs_per_user[v], L):
-                    continue
-
                 dist = bit_counts[p] - bit_counts[v]
                 if best_dist is None or dist < best_dist:
                     best_dist = dist
@@ -94,7 +88,9 @@ def build_children(parent):
 def drtopk_pra_query(runs_per_user, parent, tb, te, tau):
     Lq = te - tb
     if Lq <= 0:
-        return []
+        raise ValueError("Invalid interval [tb, te)")
+    if not (0 <= tau <= 1):
+        raise ValueError("tau_durable must be between 0 and 1")
 
     roots, children = build_children(parent)
     ans = []

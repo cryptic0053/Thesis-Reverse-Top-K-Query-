@@ -1,0 +1,9 @@
+Shape of U: (5000, 32)
+Shape of P: (3000, 32)
+Factorization dimension: 32
+Dataset: Netflix subset (top 5000 users, top 3000 items)
+Rank table build time: 14.4489s
+Brute-force average runtime: 0.0458s
+Approximate average runtime: 0.0063s
+Speedup: 7.2x
+Recall / overlap at k=10: 0.9600

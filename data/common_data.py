@@ -148,6 +148,18 @@ def load_data(mode="dummy", **kwargs):
         return generate_movielens_static(d=kwargs.get('d', 32))
     elif mode == "movielens_temporal":
         return generate_movielens_temporal(L=kwargs.get('L', 5))
+    elif mode == "netflix_static":
+        return generate_netflix_static(
+            d=kwargs.get('d', 32),
+            max_users=kwargs.get('max_users', 5000),
+            max_items=kwargs.get('max_items', 3000),
+        )
+    elif mode == "netflix_temporal":
+        return generate_netflix_temporal(
+            L=kwargs.get('L', 5),
+            max_users=kwargs.get('max_users', 5000),
+            max_items=kwargs.get('max_items', 3000),
+        )
     else:
         raise ValueError(f"Unknown generator mode: {mode}")
 
@@ -303,6 +315,204 @@ def generate_movielens_temporal(L=5):
     np.save(w_path, W)
     
     return P.astype(np.float32), W.astype(np.float32)
+
+
+# ====================================================================
+#  Netflix Prize dataset
+# ====================================================================
+
+def _iter_netflix_raw(raw_dir):
+    """Yield (movieId, userId, rating, date_str) from combined_data_*.txt."""
+    for part in range(1, 5):
+        fpath = os.path.join(raw_dir, f"combined_data_{part}.txt")
+        if not os.path.exists(fpath):
+            raise FileNotFoundError(f"Missing {fpath}")
+        current_movie = None
+        with open(fpath, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                if line.endswith(":"):
+                    current_movie = int(line[:-1])
+                else:
+                    parts = line.split(",")
+                    yield current_movie, int(parts[0]), int(parts[1]), parts[2]
+        print(f"  [pass] combined_data_{part}.txt")
+
+
+def generate_netflix_static(d=32, max_users=5000, max_items=3000):
+    """Build SVD embeddings from Netflix Prize data.
+
+    Uses a memory-efficient two-pass approach:
+      Pass 1 -- count ratings per user/item to find the top subset.
+      Pass 2 -- collect only subset ratings into a DataFrame.
+    """
+    from collections import Counter
+
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    RAW_DIR = os.path.join(BASE_DIR, "data", "raw", "Netflix")
+    PROCESSED_DIR = os.path.join(BASE_DIR, "data", "processed", "netflix")
+    os.makedirs(PROCESSED_DIR, exist_ok=True)
+
+    subset_path = os.path.join(PROCESSED_DIR, "ratings_subset.csv")
+
+    # If subset already cached, load and rebuild SVD from it
+    if os.path.exists(subset_path):
+        print("Loading cached Netflix subset ...")
+        df = pd.read_csv(subset_path)
+        df["date"] = pd.to_datetime(df["date"])
+    else:
+        # ---- Pass 1: count frequencies ----
+        print("Pass 1: counting user/item frequencies ...")
+        user_counts = Counter()
+        item_counts = Counter()
+        for mid, uid, rating, date_str in _iter_netflix_raw(RAW_DIR):
+            user_counts[uid] += 1
+            item_counts[mid] += 1
+
+        top_users = set(u for u, _ in user_counts.most_common(max_users))
+        top_items = set(m for m, _ in item_counts.most_common(max_items))
+        print(f"  top users: {len(top_users)}, top items: {len(top_items)}")
+
+        # ---- Pass 2: collect subset ratings ----
+        print("Pass 2: collecting subset ratings ...")
+        rows = []
+        for mid, uid, rating, date_str in _iter_netflix_raw(RAW_DIR):
+            if uid in top_users and mid in top_items:
+                rows.append((mid, uid, rating, date_str))
+
+        df = pd.DataFrame(rows, columns=["movieId", "userId", "rating", "date"])
+        df["date"] = pd.to_datetime(df["date"])
+        print(f"  subset: {len(df):,} ratings")
+
+        # Build index maps and save
+        df["user_idx"] = df["userId"].astype("category").cat.codes
+        df["item_idx"] = df["movieId"].astype("category").cat.codes
+
+        user_map = df[["userId", "user_idx"]].drop_duplicates()
+        item_map = df[["movieId", "item_idx"]].drop_duplicates()
+        user_map.to_csv(os.path.join(PROCESSED_DIR, "user_id_map.csv"), index=False)
+        item_map.to_csv(os.path.join(PROCESSED_DIR, "item_id_map.csv"), index=False)
+
+        df.to_csv(subset_path, index=False)
+        print(f"  cached subset to {subset_path}")
+
+    # Ensure idx columns exist (for cached load)
+    if "user_idx" not in df.columns:
+        df["user_idx"] = df["userId"].astype("category").cat.codes
+        df["item_idx"] = df["movieId"].astype("category").cat.codes
+
+    n_users = df["user_idx"].nunique()
+    n_items = df["item_idx"].nunique()
+
+    print(f"Building sparse matrix for {n_users} users and {n_items} items ...")
+    R = sp.coo_matrix(
+        (df["rating"].values, (df["user_idx"].values, df["item_idx"].values)),
+        shape=(n_users, n_items),
+    ).asfptype()
+
+    svd_k = min(d, min(n_users, n_items) - 1)
+    print(f"Running SVD with d={svd_k} ...")
+    u, s, vt = svds(R, k=svd_k)
+
+    s_sqrt = np.diag(np.sqrt(s))
+    U = u @ s_sqrt
+    P = (s_sqrt @ vt).T  # (n_items, d)
+
+    U /= np.linalg.norm(U, axis=1, keepdims=True)
+    P /= np.linalg.norm(P, axis=1, keepdims=True)
+
+    np.save(os.path.join(PROCESSED_DIR, "U_user_vectors.npy"), U.astype(np.float32))
+    np.save(os.path.join(PROCESSED_DIR, "P_item_vectors.npy"), P.astype(np.float32))
+
+    print(f"  U: {U.shape}  P: {P.shape}")
+    return U.astype(np.float32), P.astype(np.float32)
+
+
+def generate_netflix_temporal(L=5, max_users=5000, max_items=3000):
+    """Build temporal user-preference tensor from Netflix dates."""
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    PROCESSED_DIR = os.path.join(BASE_DIR, "data", "processed", "netflix")
+
+    p_path = os.path.join(PROCESSED_DIR, "P_item_vectors.npy")
+    subset_path = os.path.join(PROCESSED_DIR, "ratings_subset.csv")
+    user_map_path = os.path.join(PROCESSED_DIR, "user_id_map.csv")
+
+    if not os.path.exists(p_path):
+        print("Netflix P_item_vectors.npy not found, running static first ...")
+        generate_netflix_static(max_users=max_users, max_items=max_items)
+
+    P = np.load(p_path)
+    d = P.shape[1]
+
+    if os.path.exists(subset_path):
+        print("Loading Netflix subset ratings ...")
+        df = pd.read_csv(subset_path)
+        df["date"] = pd.to_datetime(df["date"])
+    else:
+        raise FileNotFoundError("ratings_subset.csv not found! Run netflix_static first.")
+
+    user_map = pd.read_csv(user_map_path)
+    n_users = user_map["user_idx"].max() + 1
+
+    # ---- time windows from Netflix dates ----
+    df = df.sort_values("date")
+    min_ts = df["date"].min().timestamp()
+    max_ts = df["date"].max().timestamp() + 1
+    bins = np.linspace(min_ts, max_ts, L + 1)
+    df["time_window"] = np.digitize(df["date"].apply(lambda x: x.timestamp()), bins) - 1
+    df["time_window"] = df["time_window"].clip(0, L - 1)
+
+    print(f"Building W temporal tensor ({n_users} users, L={L}, d={d}) ...")
+
+    P_double = P.astype(np.float64)
+
+    # vectorised accumulation
+    overall_sums = np.zeros((n_users, d), dtype=np.float64)
+    overall_counts = np.zeros(n_users, dtype=np.int32)
+    window_sums = np.zeros((n_users, L, d), dtype=np.float64)
+    window_counts = np.zeros((n_users, L), dtype=np.int32)
+
+    u_arr = df["user_idx"].values
+    i_arr = df["item_idx"].values
+    w_arr = df["time_window"].values
+
+    for idx in range(len(df)):
+        u = u_arr[idx]
+        i = i_arr[idx]
+        w = w_arr[idx]
+        vec = P_double[i]
+        overall_sums[u] += vec
+        overall_counts[u] += 1
+        window_sums[u, w] += vec
+        window_counts[u, w] += 1
+
+    eps = 1e-12
+    overall_avg = overall_sums / np.maximum(overall_counts[:, None], 1.0)
+    norms = np.linalg.norm(overall_avg, axis=1, keepdims=True)
+    overall_avg /= np.maximum(norms, eps)
+    overall_avg[overall_counts == 0] = 0.0
+
+    W = np.zeros((n_users, L, d), dtype=np.float32)
+    for u in range(n_users):
+        for t in range(L):
+            if window_counts[u, t] > 0:
+                vec = window_sums[u, t] / window_counts[u, t]
+                vec_norm = np.linalg.norm(vec)
+                W[u, t] = vec / max(vec_norm, eps)
+            else:
+                if t > 0:
+                    W[u, t] = W[u, t - 1]
+                else:
+                    W[u, t] = overall_avg[u]
+
+    w_path = os.path.join(PROCESSED_DIR, "W_temporal_vectors.npy")
+    np.save(w_path, W)
+    print(f"  W: {W.shape}")
+
+    return P.astype(np.float32), W.astype(np.float32)
+
 
 if __name__ == "__main__":
     generate_dummy_data()

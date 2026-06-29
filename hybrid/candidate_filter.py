@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 TAU = 500
 
@@ -25,8 +26,7 @@ def approximate_candidate_filter(S, W, q_idx, k, c, T_table, THR):
     
     est_rank = upper + alpha * (lower - upper)
     
-    # fetch proportion of candidates based on relaxation factor
-    fetch_count = int(k * c)
+    fetch_count = math.ceil(k * c)
     fetch_count = min(fetch_count, n_users)
     
     topk_candidates = np.argpartition(est_rank, fetch_count - 1)[:fetch_count]
@@ -34,41 +34,19 @@ def approximate_candidate_filter(S, W, q_idx, k, c, T_table, THR):
 
 
 def approximate_candidate_filter_union_windows(S, W, q_idx, k, c, T_table_list, THR_list):
-    """
-    Per-window union candidate filter.
-
-    Instead of averaging user vectors across time (which loses temporal
-    preference info), this runs the approximate candidate filter independently
-    for each time window using window-specific rank tables, then returns the
-    union of all per-window candidate sets.
-
-    Parameters
-    ----------
-    S : ndarray (n_items, d)
-    W : ndarray (n_users, L, d)
-    q_idx : int
-    k : int
-    c : float  – looseness / relaxation factor
-    T_table_list : list[ndarray]  – one rank table per window, each (n_users, TAU)
-    THR_list : list[ndarray]  – one threshold matrix per window, each (n_users, TAU)
-
-    Returns
-    -------
-    candidates : ndarray of unique user ids (the union across windows)
-    """
     n_users, L, d = W.shape
     q = S[q_idx]
-    fetch_count = int(k * c)
+    fetch_count = math.ceil(k * c)
     fetch_count = min(fetch_count, n_users)
 
     all_candidates = set()
 
     for t in range(L):
-        w_t = W[:, t, :]          # (n_users, d)
-        T_table = T_table_list[t] # (n_users, TAU)
-        THR = THR_list[t]         # (n_users, TAU)
+        w_t = W[:, t, :]
+        T_table = T_table_list[t]
+        THR = THR_list[t]
 
-        s = w_t @ q               # (n_users,)
+        s = w_t @ q
 
         idx = (THR <= s[:, None]).sum(axis=1) - 1
         idx = np.clip(idx, 0, TAU - 2)
@@ -97,67 +75,114 @@ def approximate_candidate_filter_union_windows(S, W, q_idx, k, c, T_table_list, 
     return np.array(sorted(all_candidates), dtype=np.intp)
 
 
-def approximate_candidate_filter_min_window_rank(S, W, q_idx, k, c, chunk_size=4000):
+def legacy_max_window_rank_count_filter(S, W, q_idx, k, c, chunk_size=4000):
     """
-    Direct per-window maximum-rank candidate filter.
-
-    The SSA durable verifier uses bottom-k semantics: a user qualifies when
-    query item q is among the k items with the SMALLEST preference scores.
-    Therefore, a good candidate is a user where many other items score higher
-    than q (i.e. q's rank-from-top is large).
-
-    For each time window t this filter computes the rank of q for each user
-    (= how many items score strictly higher than q).  It keeps the MAXIMUM
-    rank across all windows — the window where q is ranked worst is the
-    window most likely to place q in the bottom-k.
-
-    Users with the highest max_rank are selected as candidates.
-
-    Parameters
-    ----------
-    S : ndarray (n_items, d)
-    W : ndarray (n_users, L, d)
-    q_idx : int
-    k : int
-    c : float  – relaxation factor  (candidates = k * c)
-    chunk_size : int – items processed per chunk to limit memory
-
-    Returns
-    -------
-    candidates : ndarray of user ids
+    Legacy filter designed for the old smaller-is-better SSA behavior.
+    It computes the maximum conventional rank count across all windows.
+    Does not use [tb, te). Does not use tau_durable.
+    Has no recall guarantee. Retained only for historical comparison.
     """
     n_items, d = S.shape
     n_users, L, _ = W.shape
-    fetch_count = int(k * c)
+    fetch_count = math.ceil(k * c)
     fetch_count = min(fetch_count, n_users)
 
-    q_vec = S[q_idx]   # (d,)
+    q_vec = S[q_idx]
 
-    # For each window, compute the rank of q for each user.
-    # rank_of_q[u, t] = how many items score strictly higher than q for user u
-    #                    at time t.  Higher rank = q scores poorly = more likely
-    #                    to be in bottom-k.
     max_rank = np.zeros(n_users, dtype=np.int32)
 
     for t in range(L):
-        wt = W[:, t, :]                     # (n_users, d)
-        score_q = wt @ q_vec                # (n_users,)
+        wt = W[:, t, :]
+        score_q = wt @ q_vec
 
-        # Count how many items beat q for each user, processing in chunks
         rank_t = np.zeros(n_users, dtype=np.int32)
         for start in range(0, n_items, chunk_size):
             end = min(start + chunk_size, n_items)
-            chunk_scores = wt @ S[start:end].T   # (n_users, chunk)
+            chunk_scores = wt @ S[start:end].T
             rank_t += (chunk_scores > score_q[:, None]).sum(axis=1).astype(np.int32)
 
-        # Keep the maximum (worst) rank across windows
         max_rank = np.maximum(max_rank, rank_t)
 
     if fetch_count >= n_users:
         return np.arange(n_users, dtype=np.intp)
 
-    # Select users with the HIGHEST max_rank (q scored worst for these users)
-    # argpartition with negated values gives top-k largest
     candidates = np.argpartition(-max_rank, fetch_count - 1)[:fetch_count]
     return candidates
+
+# Backward-compatible alias
+approximate_candidate_filter_min_window_rank = legacy_max_window_rank_count_filter
+
+
+def durable_quantile_rank_filter(S, W, q_idx, k, c, tb, te, tau_durable, T_table_list=None, THR_list=None):
+    """
+    Durability-aware candidate filter matching larger-is-better semantics.
+    """
+    n_items, d = S.shape
+    n_users, L, _ = W.shape
+
+    if not (0 <= tb < te <= L):
+        raise ValueError("Invalid [tb, te)")
+    if not (0 <= tau_durable <= 1):
+        raise ValueError("Invalid tau_durable")
+    if k <= 0 or c <= 0:
+        raise ValueError("k and c must be positive")
+    if not (0 <= q_idx < n_items):
+        raise IndexError("Invalid q_idx")
+        
+    query_length = te - tb
+    required_successes = math.ceil(tau_durable * query_length)
+    if required_successes == 0:
+        # If 0 successes required, all users trivially match
+        fetch_count = math.ceil(k * c)
+        return np.arange(min(fetch_count, n_users), dtype=np.intp)
+
+    fetch_count = math.ceil(k * c)
+    fetch_count = min(fetch_count, n_users)
+
+    if fetch_count >= n_users:
+        return np.arange(n_users, dtype=np.intp)
+
+    q_vec = S[q_idx]
+    est_ranks = np.zeros((n_users, query_length), dtype=np.float32)
+
+    arange_n = np.arange(n_users)
+
+    for i, t in enumerate(range(tb, te)):
+        wt = W[:, t, :]
+        s = wt @ q_vec
+
+        if T_table_list is not None and THR_list is not None:
+            T_table = T_table_list[t]
+            THR = THR_list[t]
+
+            idx = (THR <= s[:, None]).sum(axis=1) - 1
+            idx = np.clip(idx, 0, TAU - 2)
+
+            lower = T_table[arange_n, idx + 1].astype(np.float32)
+            upper = T_table[arange_n, idx].astype(np.float32)
+
+            t0 = THR[arange_n, idx]
+            t1 = THR[arange_n, idx + 1]
+            denom = (t1 - t0)
+            denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
+
+            alpha = (s - t0) / denom
+            alpha = np.clip(alpha, 0.0, 1.0)
+
+            est_ranks[:, i] = upper + alpha * (lower - upper)
+        else:
+            # Fallback to exact computation if tables not provided
+            rank_t = np.zeros(n_users, dtype=np.int32)
+            chunk_size = 4000
+            for start in range(0, n_items, chunk_size):
+                end = min(start + chunk_size, n_items)
+                chunk_scores = wt @ S[start:end].T
+                rank_t += (chunk_scores > s[:, None]).sum(axis=1).astype(np.int32)
+            est_ranks[:, i] = rank_t + 1
+
+    partition_index = required_successes - 1
+    durable_rank = np.partition(est_ranks, partition_index, axis=1)[:, partition_index]
+
+    candidates = np.argpartition(durable_rank, fetch_count - 1)[:fetch_count]
+    return np.sort(candidates).astype(np.intp)
 

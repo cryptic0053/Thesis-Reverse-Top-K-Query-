@@ -44,7 +44,7 @@ def pra_on_candidates(S, W, candidate_user_ids, q_idx, k, tb, te, tau, chunk_siz
     runs_per_user = build_ssa_for_object_chunked(S, W_subset, q_idx, k, chunk_size)
     
     # 3. Build PRA Forest on the candidates' runs
-    parent = build_pra_forest(runs_per_user, L, do_verify=True)
+    parent = build_pra_forest(runs_per_user, L)
     
     # 4. Assess durable queries via PRA tree
     result_subset_indices = drtopk_pra_query(runs_per_user, parent, tb, te, tau)

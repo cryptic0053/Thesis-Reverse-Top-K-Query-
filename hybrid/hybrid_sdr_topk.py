@@ -1,7 +1,9 @@
 from hybrid.candidate_filter import (
     approximate_candidate_filter,
     approximate_candidate_filter_union_windows,
+    legacy_max_window_rank_count_filter,
     approximate_candidate_filter_min_window_rank,
+    durable_quantile_rank_filter,
 )
 from hybrid.durable_verifier import ssa_on_candidates, pra_on_candidates
 
@@ -115,4 +117,55 @@ def hybrid_pra_query_minrank(S, W, q_idx, k, c, tb, te, tau, chunk_size=4000):
         "num_candidates": len(candidate_user_ids),
         "candidate_user_ids": candidate_user_ids,
         "result_user_ids": result_user_ids,
+    }
+
+# -- Durable quantile rank variants ----------------------------------------
+
+import time
+
+def hybrid_ssa_query_durable_rank(S, W, q_idx, k, c, tb, te, tau, T_table_list=None, THR_list=None, chunk_size=4000):
+    t0 = time.time()
+    candidate_user_ids = durable_quantile_rank_filter(
+        S, W, q_idx, k, c, tb, te, tau, T_table_list, THR_list
+    )
+    filter_time = time.time() - t0
+
+    t1 = time.time()
+    # ssa_on_candidates currently builds the runs. We combine build time and query time.
+    result_user_ids = ssa_on_candidates(
+        S, W, candidate_user_ids, q_idx, k, tb, te, tau, chunk_size
+    )
+    total_time = time.time() - t0
+
+    return {
+        "query_item": q_idx,
+        "num_total_users": W.shape[0],
+        "num_candidates": len(candidate_user_ids),
+        "candidate_user_ids": candidate_user_ids,
+        "result_user_ids": result_user_ids,
+        "filter_time": filter_time,
+        "total_time": total_time,
+    }
+
+def hybrid_pra_query_durable_rank(S, W, q_idx, k, c, tb, te, tau, T_table_list=None, THR_list=None, chunk_size=4000):
+    t0 = time.time()
+    candidate_user_ids = durable_quantile_rank_filter(
+        S, W, q_idx, k, c, tb, te, tau, T_table_list, THR_list
+    )
+    filter_time = time.time() - t0
+
+    t1 = time.time()
+    result_user_ids = pra_on_candidates(
+        S, W, candidate_user_ids, q_idx, k, tb, te, tau, chunk_size
+    )
+    total_time = time.time() - t0
+
+    return {
+        "query_item": q_idx,
+        "num_total_users": W.shape[0],
+        "num_candidates": len(candidate_user_ids),
+        "candidate_user_ids": candidate_user_ids,
+        "result_user_ids": result_user_ids,
+        "filter_time": filter_time,
+        "total_time": total_time,
     }

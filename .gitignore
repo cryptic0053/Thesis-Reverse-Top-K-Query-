@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Large Netflix raw data (files 444MB–530MB each — exceed GitHub 100MB limit)
+data/raw/Netflix/combined_data_1.txt
+data/raw/Netflix/combined_data_2.txt
+data/raw/Netflix/combined_data_3.txt
+data/raw/Netflix/combined_data_4.txt
+data/raw/Netflix/qualifying.txt
+data/raw/Netflix/probe.txt
+
+# Large processed data (229MB — exceeds GitHub 100MB limit)
+data/processed/netflix/ratings_subset.csv
+
+# Generated binary artifacts
+outputs/*.npy
+data/processed/**/*.npy
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
