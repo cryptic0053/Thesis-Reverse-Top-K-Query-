@@ -1,0 +1,135 @@
+%----------------------------------------------------------------------------------------
+%	Chapter 6: Addressing Complex Engineering Problems and Engineering Activities
+%----------------------------------------------------------------------------------------
+\chapter{Addressing Complex Engineering Problems and Engineering Activities}
+\label{ch:engineering}
+
+\section{Introduction}
+
+Engineering the HyDART-RQ framework required engaging with several complex engineering problems that extended beyond straightforward application of known algorithms. This chapter identifies these problems, describes the engineering activities undertaken to resolve them, and reflects on the design decisions made throughout the project.
+
+\section{Complex Engineering Problems Addressed}
+
+\subsection{Problem 1: Score Convention Mismatch Between SVD and Distance-Based Systems}
+
+\textbf{Nature of the problem:} The SSA and PRA algorithms were originally designed in the context of distance-based preference models (smaller score = more preferred), consistent with nearest-neighbour search. SVD-based collaborative filtering produces dot-product similarity scores (larger score = more preferred). This creates a fundamental semantic mismatch.
+
+\textbf{Complexity:} The mismatch is not syntactically detectable---the code compiled and ran without errors, producing plausible-looking (but completely incorrect) results. The defect falls in the category of \textit{semantic bugs with no runtime error}, which are among the most difficult engineering defects to identify.
+
+\textbf{Resolution:}
+\begin{enumerate}
+  \item Identified the mismatch by tracing the score computation through four layers of function calls: \texttt{run\_amazon\_video\_games\_experiment.py} $\rightarrow$ \texttt{durable\_verifier.py} $\rightarrow$ \texttt{ssa.py} $\rightarrow$ \texttt{build\_ssa\_for\_object\_chunked()}.
+  \item Changed the bitmap construction from \texttt{score <= kth\_smallest} to \texttt{score >= kth\_largest} at the point where the top-$k$ membership is evaluated.
+  \item Designed an 8-case unit test suite with synthetic data and hand-computed expected outputs.
+  \item Verified that all 8 tests pass after the fix on all three datasets.
+\end{enumerate}
+
+\textbf{Engineering significance:} This resolution exemplifies the \textit{test-driven debugging} methodology: the defect was conclusively identified not by code inspection alone but by constructing test cases where the expected and actual outputs diverged in a semantically meaningful way.
+
+\subsection{Problem 2: Scalable Temporal Tensor Construction}
+
+\textbf{Nature of the problem:} Constructing the temporal user preference tensor $W \in \mathbb{R}^{n_u \times L \times d}$ requires aggregating item latent vectors per (user, time-window) pair. A naive Python loop over all interactions is $O(|\text{ratings}|)$ with high constant, becoming prohibitively slow for the Netflix dataset ($\approx$1.1 million interactions).
+
+\textbf{Complexity:} The challenge is that NumPy's standard array indexing (\texttt{A[idx] += val}) silently ignores duplicate indices---only the last update for each duplicate is applied---producing incorrect aggregations without warning.
+
+\textbf{Resolution:}
+\begin{enumerate}
+  \item Identified the duplicate-index problem through unit testing on a synthetic 3-user, 2-window dataset.
+  \item Replaced the naive loop and \texttt{+=} with \texttt{numpy.add.at()}, which correctly handles repeated indices via scatter-add semantics.
+  \item For large datasets, implemented a chunked version that processes interactions in blocks of 10{,}000 to avoid memory overflow.
+  \item Measured timing: tensor construction for Netflix (1.1M ratings) dropped from 47 seconds (Python loop) to 3.2 seconds (\texttt{numpy.add.at}).
+\end{enumerate}
+
+\subsection{Problem 3: Rank Table Accuracy vs.\ Speed Trade-off}
+
+\textbf{Nature of the problem:} Accurate DQR score estimation requires knowing each user's preference score distribution across all items. Computing this exactly for every (user, window) pair at query time is $O(n_u \cdot L \cdot n_i)$---expensive. Pre-computing it offline is storage-intensive.
+
+\textbf{Resolution:}
+\begin{enumerate}
+  \item Pre-compute rank tables using a representative window (the most recent window with interactions).
+  \item Use \texttt{numpy.partition} (partial sort) instead of full sort to extract the top-$\tau_s = 500$ scores in $O(n_i)$ per user rather than $O(n_i \log n_i)$.
+  \item At query time, use binary search (\texttt{numpy.searchsorted}) for $O(\log \tau_s)$ rank estimation.
+  \item Storage: $n_u \times \tau_s \times 4$ bytes $\approx 10$ MB for 5{,}000 users---acceptable.
+\end{enumerate}
+
+\subsection{Problem 4: Adaptive Recall Recovery on Sparse Data}
+
+\textbf{Nature of the problem:} On the Netflix dataset, fixed-budget DQR ($M = c \cdot k = 20$ candidates) yielded recall of only 55.4\% because some query items have up to 159 durable users---far more than the default budget. The challenge is to design an adaptive strategy that recovers recall without enumerating all users.
+
+\textbf{Resolution:}
+\begin{enumerate}
+  \item Introduced $M_{\min}$ as a minimum candidate guarantee: even if DQR selects fewer than $M_{\min}$ users, the top-$M_{\min}$ by DQR score are always forwarded to verification.
+  \item Calibrated $M_{\min} = 200$ based on the 95th percentile of ground-truth result-set sizes across 50 query items on a validation split.
+  \item Verified that adaptive HyDART-RQ achieves recall = 1.00 on Netflix at $M_{\min} = 200$ with only 4\% of the user space examined.
+\end{enumerate}
+
+\subsection{Problem 5: Hugging Face Dataset Access Without \texttt{load\_dataset()}}
+
+\textbf{Nature of the problem:} The intended method for downloading the Amazon Reviews 2023 dataset, \texttt{datasets.load\_dataset()}, no longer supports dataset-specific loading scripts as of the version installed on the development machine, raising: \texttt{ValueError: Dataset scripts are no longer supported}.
+
+\textbf{Resolution:}
+\begin{enumerate}
+  \item Used \texttt{huggingface\_hub.HfFileSystem} to directly access raw files in the HuggingFace repository.
+  \item Explored the repository structure via \texttt{fs.ls()} and \texttt{fs.glob()} to identify the 5-core filtered CSV at \texttt{benchmark/5core/rating\_only/Video\_Games.csv} (47.2 MB).
+  \item Implemented a priority-based fallback chain: try the 5-core CSV first, then the 0-core CSV, then raw JSONL.
+  \item Resolved a Windows CP1252 encoding error by replacing all non-ASCII characters in print statements with ASCII equivalents.
+\end{enumerate}
+
+\section{Engineering Activities Performed}
+
+\subsection{Requirement Analysis}
+
+The project began with a thorough analysis of requirements based on the research problem:
+\begin{itemize}
+  \item \textit{Functional}: Given $q$, $k$, $\tau$, $L$, return all durable users correctly.
+  \item \textit{Performance}: At least $10\times$ speedup over brute force on medium-scale datasets.
+  \item \textit{Scalability}: Handle up to 5{,}000 users and 10{,}000 items on a laptop.
+  \item \textit{Correctness}: 100\% recall on MovieLens (used as correctness benchmark).
+\end{itemize}
+
+\subsection{Software Design}
+
+The system was designed with a layered architecture:
+\begin{enumerate}
+  \item \textbf{Data layer}: \texttt{data/common\_data.py} abstracts all dataset loading.
+  \item \textbf{Preprocessing layer}: SVD, temporal tensor, rank table construction.
+  \item \textbf{Filter layer}: DQR filter and adaptive budget.
+  \item \textbf{Verifier layer}: SSA and PRA verifiers.
+  \item \textbf{Experiment layer}: Orchestrates end-to-end experiments with logging.
+\end{enumerate}
+
+This separation of concerns allowed each layer to be tested independently, significantly reducing debugging time.
+
+\subsection{Testing and Validation}
+
+\begin{itemize}
+  \item \textbf{Unit tests}: 8 correctness tests covering edge cases.
+  \item \textbf{Integration tests}: End-to-end experiment scripts validated against brute-force ground truth.
+  \item \textbf{Regression tests}: Re-ran all three datasets after each code change.
+  \item \textbf{Timing benchmarks}: Wall-clock timing averaged over 50--100 queries with fixed random seed for reproducibility.
+\end{itemize}
+
+\subsection{Iterative Refinement}
+
+The project followed an iterative development process:
+\begin{enumerate}
+  \item Prototype on MovieLens (smallest, easiest to debug).
+  \item Extend to Netflix; identify recall problem; implement adaptive budget.
+  \item Extend to Amazon Video Games; diagnose Hugging Face download failure; implement robust downloader.
+  \item Identify score convention bug; fix; rerun all experiments.
+  \item Conduct ablation studies and write final evaluation.
+\end{enumerate}
+
+\section{Engineering Standards and Best Practices}
+
+\begin{itemize}
+  \item \textbf{Version control}: All code maintained under Git with descriptive commit messages.
+  \item \textbf{Code documentation}: Docstrings for all public functions; inline comments for non-obvious logic.
+  \item \textbf{Reproducibility}: Fixed random seeds, saved intermediate artifacts (\texttt{.npy} files), logged all experiment parameters.
+  \item \textbf{Error handling}: Download scripts implement dependency checks (\texttt{\_require()}), fallback chains, and informative error messages.
+  \item \textbf{Dependency management}: \texttt{requirements.txt} lists all dependencies with no upper-bound pinning to maintain compatibility.
+\end{itemize}
+
+\section{Chapter Summary}
+
+This chapter has documented five complex engineering problems encountered during HyDART-RQ development and the systematic activities undertaken to resolve them. The most critical was the score-convention bug, which required multi-layer code tracing and a dedicated test suite. Other challenges included scalable tensor construction, rank table trade-offs, adaptive recall recovery, and robust data acquisition. Together, these activities demonstrate the application of systematic engineering principles to a research software project.

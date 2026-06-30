@@ -160,6 +160,10 @@ def load_data(mode="dummy", **kwargs):
             max_users=kwargs.get('max_users', 5000),
             max_items=kwargs.get('max_items', 3000),
         )
+    elif mode == "amazon_video_games_static":
+        return generate_amazon_video_games_static(d=kwargs.get('d', 32))
+    elif mode == "amazon_video_games_temporal":
+        return generate_amazon_video_games_temporal(L=kwargs.get('L', 5))
     else:
         raise ValueError(f"Unknown generator mode: {mode}")
 
@@ -506,6 +510,153 @@ def generate_netflix_temporal(L=5, max_users=5000, max_items=3000):
                     W[u, t] = W[u, t - 1]
                 else:
                     W[u, t] = overall_avg[u]
+
+    w_path = os.path.join(PROCESSED_DIR, "W_temporal_vectors.npy")
+    np.save(w_path, W)
+    print(f"  W: {W.shape}")
+
+    return P.astype(np.float32), W.astype(np.float32)
+
+
+# ====================================================================
+#  Amazon Reviews 2023 Video Games dataset
+# ====================================================================
+
+def generate_amazon_video_games_static(d=32):
+    """Build SVD embeddings from Amazon Video Games medium subset.
+
+    Returns (U, P): user vectors (n_users, d) and item vectors (n_items, d).
+    Both are L2-normalised float32 arrays.
+    """
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    RAW_CSV = os.path.join(BASE_DIR, "data", "raw", "amazon_video_games",
+                           "amazon_video_games_medium.csv")
+    PROCESSED_DIR = os.path.join(BASE_DIR, "data", "processed", "amazon_video_games")
+    os.makedirs(PROCESSED_DIR, exist_ok=True)
+
+    if not os.path.exists(RAW_CSV):
+        raise FileNotFoundError(
+            f"Amazon dataset not found: {RAW_CSV}\n"
+            "Run: python scripts/download_amazon_video_games_medium.py"
+        )
+
+    print("Loading Amazon Video Games ratings ...")
+    df = pd.read_csv(RAW_CSV)
+
+    required = ["user_id", "item_id", "rating", "timestamp"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"Missing columns {missing}. Available: {list(df.columns)}"
+        )
+
+    df["user_idx"] = df["user_id"].astype("category").cat.codes
+    df["item_idx"] = df["item_id"].astype("category").cat.codes
+
+    user_map = df[["user_id", "user_idx"]].drop_duplicates()
+    item_map = df[["item_id", "item_idx"]].drop_duplicates()
+    user_map.to_csv(os.path.join(PROCESSED_DIR, "user_id_map.csv"), index=False)
+    item_map.to_csv(os.path.join(PROCESSED_DIR, "item_id_map.csv"), index=False)
+
+    n_users = df["user_idx"].nunique()
+    n_items = df["item_idx"].nunique()
+    print(f"  {n_users} users, {n_items} items, {len(df):,} ratings")
+
+    print(f"Building sparse rating matrix ({n_users} x {n_items}) ...")
+    R = sp.coo_matrix(
+        (df["rating"].values.astype(np.float32),
+         (df["user_idx"].values, df["item_idx"].values)),
+        shape=(n_users, n_items),
+    ).asfptype()
+
+    svd_k = min(d, min(n_users, n_items) - 1)
+    print(f"Running SVD with k={svd_k} ...")
+    u_svd, s_svd, vt_svd = svds(R, k=svd_k)
+
+    s_sqrt = np.diag(np.sqrt(s_svd))
+    U = u_svd @ s_sqrt
+    P = (s_sqrt @ vt_svd).T  # (n_items, d)
+
+    eps = 1e-12
+    U /= np.maximum(np.linalg.norm(U, axis=1, keepdims=True), eps)
+    P /= np.maximum(np.linalg.norm(P, axis=1, keepdims=True), eps)
+
+    np.save(os.path.join(PROCESSED_DIR, "U_user_vectors.npy"), U.astype(np.float32))
+    np.save(os.path.join(PROCESSED_DIR, "P_item_vectors.npy"), P.astype(np.float32))
+    print(f"  U: {U.shape}  P: {P.shape}")
+
+    return U.astype(np.float32), P.astype(np.float32)
+
+
+def generate_amazon_video_games_temporal(L=5):
+    """Build temporal user-preference tensor W from Amazon review timestamps.
+
+    Returns (P, W):
+      P : item vectors  (n_items, d)  -- static SVD embeddings
+      W : user tensor   (n_users, L, d) -- average item vector per time window
+    """
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    RAW_CSV = os.path.join(BASE_DIR, "data", "raw", "amazon_video_games",
+                           "amazon_video_games_medium.csv")
+    PROCESSED_DIR = os.path.join(BASE_DIR, "data", "processed", "amazon_video_games")
+
+    p_path       = os.path.join(PROCESSED_DIR, "P_item_vectors.npy")
+    user_map_path = os.path.join(PROCESSED_DIR, "user_id_map.csv")
+    item_map_path = os.path.join(PROCESSED_DIR, "item_id_map.csv")
+
+    if not os.path.exists(p_path):
+        print("P_item_vectors.npy not found; running static embedding first ...")
+        generate_amazon_video_games_static()
+
+    P = np.load(p_path)
+    d = P.shape[1]
+
+    df = pd.read_csv(RAW_CSV)
+    user_map = pd.read_csv(user_map_path)
+    item_map = pd.read_csv(item_map_path)
+    df = df.merge(user_map, on="user_id").merge(item_map, on="item_id")
+
+    # Amazon timestamps are Unix milliseconds; bin into L equal time windows
+    ts = df["timestamp"].values.astype(np.float64)
+    bins = np.linspace(ts.min(), ts.max() + 1.0, L + 1)
+    df["time_window"] = np.clip(np.digitize(ts, bins) - 1, 0, L - 1)
+
+    n_users = int(user_map["user_idx"].max()) + 1
+    P_d = P.astype(np.float64)
+    eps = 1e-12
+
+    u_arr = df["user_idx"].values.astype(int)
+    i_arr = df["item_idx"].values.astype(int)
+    w_arr = df["time_window"].values.astype(int)
+
+    overall_sums   = np.zeros((n_users, d), dtype=np.float64)
+    overall_counts = np.zeros(n_users,      dtype=np.int32)
+    window_sums    = np.zeros((n_users, L, d), dtype=np.float64)
+    window_counts  = np.zeros((n_users, L),    dtype=np.int32)
+
+    print(f"Building temporal preference tensor ({n_users} users, L={L}, d={d}) ...")
+    np.add.at(overall_sums,   u_arr, P_d[i_arr])
+    np.add.at(overall_counts, u_arr, 1)
+    for t in range(L):
+        mask = w_arr == t
+        if mask.any():
+            np.add.at(window_sums[:, t, :], u_arr[mask], P_d[i_arr[mask]])
+            np.add.at(window_counts[:, t],  u_arr[mask], 1)
+
+    overall_avg = overall_sums / np.maximum(overall_counts[:, None], 1.0)
+    norms = np.linalg.norm(overall_avg, axis=1, keepdims=True)
+    overall_avg /= np.maximum(norms, eps)
+    overall_avg[overall_counts == 0] = 0.0
+
+    W = np.zeros((n_users, L, d), dtype=np.float32)
+    for uu in range(n_users):
+        for t in range(L):
+            if window_counts[uu, t] > 0:
+                vec = window_sums[uu, t] / window_counts[uu, t]
+                nrm = np.linalg.norm(vec)
+                W[uu, t] = vec / max(nrm, eps)
+            else:
+                W[uu, t] = W[uu, t - 1] if t > 0 else overall_avg[uu]
 
     w_path = os.path.join(PROCESSED_DIR, "W_temporal_vectors.npy")
     np.save(w_path, W)

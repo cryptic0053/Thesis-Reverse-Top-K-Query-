@@ -1,0 +1,291 @@
+%----------------------------------------------------------------------------------------
+%	HyDART-RQ Thesis - Main Document
+%	KUET CSE 4000 Capstone Project / Thesis
+%	Author: Anirban Ghosh Argha (Roll: 2007094)
+%	Supervisor: Dr. K. M. Azharul Hasan
+%----------------------------------------------------------------------------------------
+
+\documentclass[
+  12pt,
+  english,
+  oneside,
+]{report}
+
+%----------------------------------------------------------------------------------------
+%	Packages
+%----------------------------------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{times}               % Times New Roman
+\usepackage[a4paper,
+  inner=30mm, outer=25mm,
+  top=30mm,   bottom=25mm]{geometry}
+\usepackage{setspace}
+\onehalfspacing                  % 1.5 line spacing
+
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{subcaption}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{emptypage}
+\usepackage{pdfpages}
+\usepackage{listings}
+\usepackage{parskip}
+
+% TikZ
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, calc, decorations.pathreplacing}
+
+% Algorithms
+\usepackage[ruled,vlined,linesnumbered]{algorithm2e}
+
+% Bibliography
+\usepackage[style=ieee, backend=biber, sorting=none]{biblatex}
+\addbibresource{bibliography.bib}
+
+%----------------------------------------------------------------------------------------
+%	Header / Footer
+%----------------------------------------------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\nouppercase{\leftmark}}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+%----------------------------------------------------------------------------------------
+%	Chapter Title Style
+%----------------------------------------------------------------------------------------
+\titleformat{\chapter}[display]
+  {\normalfont\Large\bfseries\centering}
+  {CHAPTER \thechapter}{10pt}{\Large\bfseries\centering}
+\titlespacing*{\chapter}{0pt}{30pt}{20pt}
+
+\titleformat{\section}{\normalfont\large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection}{1em}{}
+
+%----------------------------------------------------------------------------------------
+%	Hyperref colours
+%----------------------------------------------------------------------------------------
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=blue,
+  pdftitle={HyDART-RQ: A Hybrid Framework for Durable Reverse Top-k Query Processing over Time-Varying Preferences},
+  pdfauthor={Anirban Ghosh Argha},
+}
+
+%----------------------------------------------------------------------------------------
+%	Custom commands
+%----------------------------------------------------------------------------------------
+\newcommand{\thesistitle}{HyDART-RQ: A Hybrid Framework for Durable Reverse Top-k Query Processing over Time-Varying Preferences}
+\newcommand{\authorname}{Anirban Ghosh Argha}
+\newcommand{\rollnumber}{2007094}
+\newcommand{\supname}{Dr. K. M. Azharul Hasan}
+\newcommand{\supdesig}{Professor}
+\newcommand{\deptname}{Department of Computer Science \& Engineering}
+\newcommand{\univname}{Khulna University of Engineering \& Technology}
+\newcommand{\degreename}{Bachelor of Science in Computer Science \& Engineering}
+\newcommand{\coursename}{CSE 4000: Thesis / Project}
+\newcommand{\gradyear}{2026}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny,
+  language=Python,
+}
+
+%----------------------------------------------------------------------------------------
+\begin{document}
+
+%----------------------------------------------------------------------------------------
+%	TITLE PAGE
+%----------------------------------------------------------------------------------------
+\begin{titlepage}
+  \begin{center}
+    \vspace*{1cm}
+    {\LARGE \bfseries \univname \par}
+    \vspace{0.3cm}
+    {\large Khulna-9203, Bangladesh \par}
+    \vspace{0.5cm}
+    \hrule height 2pt
+    \vspace{0.3cm}
+    {\large \deptname \par}
+    \vspace{0.8cm}
+    {\large \bfseries Thesis Report \par}
+    {\normalsize Submitted in partial fulfillment of the requirements for the degree of \par}
+    {\large \degreename \par}
+    \vspace{1cm}
+    \hrule height 1pt
+    \vspace{0.5cm}
+    {\Large \bfseries \thesistitle \par}
+    \vspace{0.5cm}
+    \hrule height 1pt
+    \vspace{1cm}
+
+    \begin{minipage}[t]{0.48\textwidth}
+      \begin{flushleft}
+        \textbf{Submitted by:}\\[4pt]
+        \authorname \\
+        Roll: \rollnumber \\
+        \deptname \\
+        \univname
+      \end{flushleft}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.48\textwidth}
+      \begin{flushright}
+        \textbf{Supervised by:}\\[4pt]
+        \supname \\
+        \supdesig \\
+        \deptname \\
+        \univname
+      \end{flushright}
+    \end{minipage}
+
+    \vfill
+    {\large \gradyear \par}
+  \end{center}
+\end{titlepage}
+
+%----------------------------------------------------------------------------------------
+%	DECLARATION
+%----------------------------------------------------------------------------------------
+\chapter*{Declaration}
+\addcontentsline{toc}{chapter}{Declaration}
+
+I hereby declare that this thesis is the result of my own research and has not been submitted elsewhere for any other degree or qualification. All sources of information have been duly cited and acknowledged.
+
+\vspace{2cm}
+
+\begin{flushright}
+  \rule{0.4\linewidth}{0.5pt} \\
+  \authorname \\
+  Roll: \rollnumber \\
+  \deptname, \univname \\
+  Date: \today
+\end{flushright}
+
+\vspace{1cm}
+
+This is to certify that the above declaration made by the candidate is correct to the best of my knowledge and belief.
+
+\vspace{2cm}
+
+\begin{flushright}
+  \rule{0.4\linewidth}{0.5pt} \\
+  \supname \\
+  \supdesig \\
+  \deptname, \univname
+\end{flushright}
+
+%----------------------------------------------------------------------------------------
+%	ABSTRACT
+%----------------------------------------------------------------------------------------
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Reverse top-$k$ (RT-$k$) queries retrieve all data objects (users) for whom a query item ranks within the top-$k$ most preferred items. While RT-$k$ queries have been extensively studied in static settings, the temporal dynamics of user preferences---where tastes evolve across successive time periods---have received limited attention. This thesis addresses the \textit{Durable Reverse Top-k (DRTop-k)} query problem: given a query item $q$, a durability threshold $\tau$, and $L$ time windows, find all users who consistently rank $q$ in their top-$k$ preferred items for at least a $\tau$ fraction of all time windows.
+
+We propose \textbf{HyDART-RQ} (Hybrid Durable Approximate Reverse Top-$k$ Query), a two-phase framework that efficiently processes DRTop-$k$ queries over time-varying preference data. User preferences are modeled via Singular Value Decomposition (SVD)-based matrix factorization, which decomposes the sparse user-item rating matrix into latent factor representations. A temporal user preference tensor $W \in \mathbb{R}^{n_u \times L \times d}$ captures how each user's preference profile evolves across $L$ equal-width time windows.
+
+The core innovation of HyDART-RQ is the \textit{Durable Quantile Rank (DQR) filter}, which efficiently prunes users who cannot satisfy the durability threshold. The DQR filter leverages pre-computed rank tables to estimate, in $O(1)$ per time window, the rank of any query item for any user. Users whose DQR score exceeds $c \cdot k$ (for a relaxation factor $c$) are discarded, dramatically shrinking the candidate set. The surviving candidates are then verified exactly using either the \textit{Sweep Sort Algorithm (SSA)} or the \textit{Priority Region Algorithm (PRA)}, both of which operate efficiently on run-length encoded preference bitmaps.
+
+HyDART-RQ is evaluated on three real-world datasets: MovieLens 100K (610 users, 9{,}724 items), Netflix Prize subset (5{,}000 users, 3{,}000 items), and Amazon Reviews 2023---Video Games (4{,}716 users, 2{,}996 items). On MovieLens, the framework achieves perfect recall (1.00) with 96.7\% user-space pruning. On Netflix (with an adaptive candidate budget of 200), it achieves recall of 1.00 at a 20.3$\times$ speedup. On Amazon Video Games, it achieves 92.7\% recall with 99.7\% pruning and a 21.9$\times$ speedup over brute-force SSA. A critical implementation correction---changing the score comparison direction from smaller-is-better to larger-is-better to align with dot-product semantics---is identified, documented, and validated through a suite of eight correctness unit tests. The results demonstrate that HyDART-RQ delivers effective recall--efficiency trade-offs across domains with varying interaction density and temporal distribution.
+
+\vspace{1em}
+\noindent\textbf{Keywords:} Durable reverse top-$k$ query, temporal preference, matrix factorization, SVD, DQR filter, sweep sort algorithm, priority region algorithm, recommendation systems, candidate pruning.
+
+%----------------------------------------------------------------------------------------
+%	ACKNOWLEDGEMENTS
+%----------------------------------------------------------------------------------------
+\chapter*{Acknowledgements}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+
+First and foremost, I express my sincere gratitude to my thesis supervisor, \textbf{\supname}, \supdesig, \deptname, \univname, for his invaluable guidance, unwavering support, and intellectual inspiration throughout the course of this research. His expertise in database systems and query processing has been instrumental in shaping the direction and quality of this work.
+
+I extend my heartfelt thanks to the faculty members of the Department of Computer Science \& Engineering at KUET for their encouragement and the rich academic environment they have fostered. I am also grateful to the open-source community and the maintainers of the MovieLens, Netflix Prize, and Amazon Reviews 2023 datasets for making high-quality benchmark data publicly available.
+
+Finally, I owe a deep debt of gratitude to my family for their constant encouragement, patience, and moral support during the long hours devoted to this research.
+
+%----------------------------------------------------------------------------------------
+%	TABLE OF CONTENTS / LISTS
+%----------------------------------------------------------------------------------------
+\tableofcontents
+\listoffigures
+\listoftables
+
+%----------------------------------------------------------------------------------------
+%	ABBREVIATIONS
+%----------------------------------------------------------------------------------------
+\chapter*{List of Abbreviations}
+\addcontentsline{toc}{chapter}{List of Abbreviations}
+
+\begin{tabular}{ll}
+\toprule
+\textbf{Abbreviation} & \textbf{Full Form} \\
+\midrule
+DRTop-$k$ & Durable Reverse Top-$k$ \\
+RT-$k$    & Reverse Top-$k$ \\
+DQR       & Durable Quantile Rank \\
+SSA       & Sweep Sort Algorithm \\
+PRA       & Priority Region Algorithm \\
+SVD       & Singular Value Decomposition \\
+HyDART-RQ & Hybrid Durable Approximate Reverse Top-$k$ Query \\
+CF        & Collaborative Filtering \\
+MF        & Matrix Factorization \\
+RLE       & Run-Length Encoding \\
+API       & Application Programming Interface \\
+CSV       & Comma-Separated Values \\
+NaN       & Not a Number \\
+KUET      & Khulna University of Engineering \& Technology \\
+CSE       & Computer Science \& Engineering \\
+ML        & Machine Learning \\
+RNN       & Recurrent Neural Network \\
+KNN       & k-Nearest Neighbour \\
+RMSE      & Root Mean Square Error \\
+\bottomrule
+\end{tabular}
+
+%----------------------------------------------------------------------------------------
+%	CHAPTERS
+%----------------------------------------------------------------------------------------
+\mainmatter
+\pagestyle{fancy}
+
+\include{Chapters/Chapter1}
+\include{Chapters/Chapter2}
+\include{Chapters/Chapter3}
+\include{Chapters/Chapter4}
+\include{Chapters/Chapter5}
+\include{Chapters/Chapter6}
+\include{Chapters/Chapter7}
+
+%----------------------------------------------------------------------------------------
+%	BIBLIOGRAPHY
+%----------------------------------------------------------------------------------------
+\printbibliography[heading=bibintoc, title={References}]
+
+%----------------------------------------------------------------------------------------
+%	APPENDICES
+%----------------------------------------------------------------------------------------
+\appendix
+\include{Appendices/AppendixA}
+\include{Appendices/AppendixB}
+
+\end{document}

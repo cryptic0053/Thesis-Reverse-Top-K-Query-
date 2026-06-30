@@ -1,0 +1,153 @@
+%----------------------------------------------------------------------------------------
+%	Appendix A: Key Code Listings
+%----------------------------------------------------------------------------------------
+\chapter{Key Code Listings}
+\label{appendix:code}
+
+This appendix contains condensed versions of the most important functions in the HyDART-RQ codebase for reference.
+
+\section{DQR Candidate Filter}
+
+\begin{lstlisting}[language=Python, caption={DQR candidate filter (\texttt{hybrid/candidate\_filter.py})}]
+import numpy as np
+
+def durable_quantile_rank_filter(
+    W, S, q_idx, k, tau, c, rank_table, tau_steps=500
+):
+    """
+    Phase 1: DQR candidate filter.
+    Returns indices of candidate users (sorted by DQR score).
+    """
+    n_users, L, d = W.shape
+    r_req = int(np.ceil(tau * L))   # windows needed for durability
+    M = int(np.ceil(c * k))         # max candidate rank threshold
+
+    # Score matrix: shape (n_users, L)
+    q_vec = S[q_idx]
+    scores = np.einsum('uld,d->ul', W, q_vec)  # (n_users, L)
+
+    # Estimated rank per (user, window) via binary search on rank table
+    # rank_table shape: (n_users, tau_steps), sorted descending
+    rank_est = np.empty_like(scores, dtype=np.int32)
+    for t in range(L):
+        # searchsorted on descending table: flip to ascending
+        flipped = rank_table[:, ::-1]
+        rank_est[:, t] = tau_steps - np.searchsorted(
+            flipped, scores[:, t], side='right'
+        )
+
+    # DQR = r_req-th smallest rank estimate per user
+    rank_est_sorted = np.sort(rank_est, axis=1)  # ascending
+    dqr_scores = rank_est_sorted[:, r_req - 1]
+
+    # Select candidates with DQR <= M
+    candidate_mask = dqr_scores <= M
+    candidates = np.where(candidate_mask)[0]
+    return candidates
+\end{lstlisting}
+
+\section{Bitmap Construction and SSA Verifier}
+
+\begin{lstlisting}[language=Python, caption={Exact bitmap construction and SSA verify (\texttt{baselines/durable/ssa.py})}]
+import numpy as np
+
+def build_ssa_for_object_chunked(S, W, q_idx, k, chunk_size=500):
+    """
+    Build run-length-encoded bitmaps for all users.
+    h[u][t] = 1 iff item q_idx in top-k for user u at window t.
+    CRITICAL: score is dot product (larger = more preferred).
+    """
+    n_users, L, d = W.shape
+    n_items = S.shape[0]
+    q_vec = S[q_idx]
+    runs_all = []
+
+    for start in range(0, n_users, chunk_size):
+        end = min(start + chunk_size, n_users)
+        W_chunk = W[start:end]  # (chunk, L, d)
+        bitmaps = []
+        for t in range(L):
+            # All item scores for this chunk and window
+            all_scores = W_chunk[:, t, :] @ S.T  # (chunk, n_items)
+            q_scores   = W_chunk[:, t, :] @ q_vec  # (chunk,)
+            # k-th largest score per user
+            kth_scores = np.partition(all_scores, -k, axis=1)[:, -k]
+            # CORRECTED: top-k if q_score >= kth_largest
+            h_t = (q_scores >= kth_scores).astype(np.int8)
+            bitmaps.append(h_t)
+        bitmaps = np.stack(bitmaps, axis=1)  # (chunk, L)
+
+        for u_local in range(end - start):
+            runs = []
+            bit = bitmaps[u_local]
+            in_run = False
+            for t in range(L):
+                if bit[t] == 1 and not in_run:
+                    run_start = t
+                    in_run = True
+                elif bit[t] == 0 and in_run:
+                    runs.append((run_start, t))
+                    in_run = False
+            if in_run:
+                runs.append((run_start, L))
+            runs_all.append(runs)
+
+    return runs_all
+
+
+def drtopk_ssa_query(runs, tb, te, tau):
+    """
+    Count overlap of runs with [tb, te) and check durability.
+    """
+    L_prime = te - tb
+    req = int(np.ceil(tau * L_prime))
+    count = 0
+    for (s, e) in runs:
+        overlap = min(e, te) - max(s, tb)
+        if overlap > 0:
+            count += overlap
+    return count >= req
+\end{lstlisting}
+
+\section{Temporal Tensor Construction}
+
+\begin{lstlisting}[language=Python, caption={Temporal tensor construction with \texttt{numpy.add.at} (\texttt{data/common\_data.py})}]
+def build_temporal_tensor(ratings_df, P, user_map, item_map, L):
+    """
+    Build W[n_users, L, d] from timestamped ratings.
+    Uses numpy.add.at to correctly handle duplicate (user, window) indices.
+    """
+    n_users, d = len(user_map), P.shape[1]
+    W = np.zeros((n_users, L, d), dtype=np.float64)
+    counts = np.zeros((n_users, L), dtype=np.int32)
+
+    t_min = ratings_df['timestamp'].min()
+    t_max = ratings_df['timestamp'].max()
+    bins = np.linspace(t_min, t_max, L + 1)
+
+    u_idx = ratings_df['user_id'].map(user_map).values
+    i_idx = ratings_df['item_id'].map(item_map).values
+    ts    = ratings_df['timestamp'].values
+    win   = np.clip(np.digitize(ts, bins) - 1, 0, L - 1)
+
+    for t in range(L):
+        mask = win == t
+        np.add.at(W[:, t, :], u_idx[mask], P[i_idx[mask]])
+        np.add.at(counts[:, t],  u_idx[mask], 1)
+
+    # Normalize and fill empty windows
+    for t in range(L):
+        nonzero = counts[:, t] > 0
+        W[nonzero, t, :] /= counts[nonzero, t, np.newaxis]
+
+    # Fallback: copy from previous window, else global average
+    global_avg = W.mean(axis=1, keepdims=True)  # (n_users, 1, d)
+    for t in range(1, L):
+        empty = counts[:, t] == 0
+        W[empty, t, :] = W[empty, t-1, :]
+    for t in range(L):
+        still_empty = (W[:, t, :] == 0).all(axis=1)
+        W[still_empty, t, :] = global_avg[still_empty, 0, :]
+
+    return W.astype(np.float32)
+\end{lstlisting}

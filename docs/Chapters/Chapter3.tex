@@ -1,0 +1,365 @@
+%----------------------------------------------------------------------------------------
+%	Chapter 3: Methodology
+%----------------------------------------------------------------------------------------
+\chapter{Methodology}
+\label{ch:methodology}
+
+\section{Introduction}
+
+This chapter presents the complete HyDART-RQ methodology, from formal problem definitions through the full algorithmic pipeline. Figure~\ref{fig:pipeline} shows the high-level architecture: raw rating data flows through SVD-based preprocessing to produce item embeddings $S$ and a temporal user tensor $W$; at query time, the DQR filter prunes the user space to a small candidate set, which is then exactly verified by the SSA or PRA verifier. We detail each component in the following sections.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=0.6cm and 1.2cm,
+  box/.style={draw, rounded corners=4pt, minimum width=2.4cm, minimum height=0.85cm, align=center, font=\small},
+  arrow/.style={-{Stealth[length=6pt]}, thick},
+  phase/.style={draw, dashed, rounded corners=6pt, inner sep=8pt},
+]
+
+% Offline phase nodes
+\node[box, fill=blue!10] (raw) {Raw\\Rating Data};
+\node[box, fill=blue!10, right=of raw] (svd) {SVD\\Factorization};
+\node[box, fill=blue!10, right=of svd] (tensor) {Temporal\\Tensor $W$};
+\node[box, fill=blue!10, right=of tensor] (rtable) {Rank\\Tables $T$};
+
+% Query time nodes
+\node[box, fill=green!10, below=1.4cm of raw] (query) {Query Item $q$\\params $k$, $\tau$};
+\node[box, fill=orange!15, below=1.4cm of svd] (dqr) {DQR\\Filter};
+\node[box, fill=orange!15, below=1.4cm of tensor] (cand) {Candidate\\Set $\mathcal{C}$};
+\node[box, fill=red!10, below=1.4cm of rtable] (ssa) {SSA/PRA\\Verifier};
+\node[box, fill=green!15, right=1.2cm of ssa] (result) {Durable\\Users $\mathcal{D}$};
+
+% Offline phase bracket
+\node[phase, fit=(raw)(svd)(tensor)(rtable), label=above:{\textbf{Offline Phase}}] {};
+
+% Online phase bracket
+\node[phase, fit=(query)(dqr)(cand)(ssa), label=below:{\textbf{Online Phase}}] {};
+
+% Arrows offline
+\draw[arrow] (raw) -- (svd);
+\draw[arrow] (svd) -- (tensor);
+\draw[arrow] (tensor) -- (rtable);
+
+% Arrows online
+\draw[arrow] (query) -- (dqr);
+\draw[arrow] (rtable) -- (dqr);
+\draw[arrow] (dqr) -- (cand);
+\draw[arrow] (cand) -- (ssa);
+\draw[arrow] (ssa) -- (result);
+
+% Cross-phase arrow
+\draw[arrow, dashed] (svd) -- (dqr) node[midway, right, font=\tiny] {$S$};
+\end{tikzpicture}
+\caption{HyDART-RQ two-phase pipeline. The offline phase pre-computes factorizations and rank tables; the online phase applies DQR filtering followed by exact SSA/PRA verification.}
+\label{fig:pipeline}
+\end{figure}
+
+\section{Notation and Problem Formalization}
+
+Table~\ref{tab:notation} defines all symbols used throughout the thesis.
+
+\begin{table}[htbp]
+\centering
+\caption{Summary of Notation}
+\label{tab:notation}
+\begin{tabular}{cl}
+\toprule
+\textbf{Symbol} & \textbf{Description} \\
+\midrule
+$\mathcal{U}$, $n_u$ & Set of users and its cardinality \\
+$\mathcal{I}$, $n_i$ & Set of items and its cardinality \\
+$R \in \mathbb{R}^{n_u \times n_i}$ & Sparse user-item rating matrix \\
+$d$ & Latent factor dimensionality \\
+$U \in \mathbb{R}^{n_u \times d}$ & User latent factor matrix (SVD) \\
+$S \in \mathbb{R}^{n_i \times d}$ & Item latent factor matrix (SVD) \\
+$L$ & Number of time windows \\
+$W \in \mathbb{R}^{n_u \times L \times d}$ & Temporal user preference tensor \\
+$\mathbf{w}_{u,t}$ & User $u$'s preference vector in window $t$ (row of $W$) \\
+$\mathbf{s}_q$ & Item $q$'s latent vector (row of $S$) \\
+$\text{score}(u, q, t)$ & Preference score: $\mathbf{w}_{u,t} \cdot \mathbf{s}_q$ \\
+$\text{rank}(u, q, t)$ & Rank of item $q$ for user $u$ in window $t$ (1 = most preferred) \\
+$k$ & Top-$k$ threshold \\
+$\tau \in (0,1]$ & Durability threshold (fraction of windows) \\
+$[t_b, t_e)$ & Query time interval \\
+$L' = t_e - t_b$ & Number of windows in query interval \\
+$\mathcal{D}(q, k, \tau)$ & Result set: durable reverse top-$k$ users \\
+$c \geq 1$ & DQR relaxation factor \\
+$T \in \mathbb{Z}^{n_u \times \tau_s}$ & Rank table (rank of each user's $\tau$-th quantile per window) \\
+$\mathcal{C}$ & Candidate set output by DQR filter \\
+$\tau_s$ & Number of quantile levels in rank table \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent\textbf{Definition 1 (Preference Score):}
+For user $u \in \mathcal{U}$, item $q \in \mathcal{I}$, and time window $t \in \{0, \ldots, L-1\}$, the preference score is:
+\[
+  \text{score}(u, q, t) = \mathbf{w}_{u,t} \cdot \mathbf{s}_q = \sum_{j=1}^{d} w_{u,t,j} \cdot s_{q,j}
+\]
+A \emph{higher} score indicates stronger preference (larger-is-better convention).
+
+\medskip
+\noindent\textbf{Definition 2 (Rank):}
+$\text{rank}(u, q, t) = |\{i \in \mathcal{I} : \text{score}(u, i, t) \geq \text{score}(u, q, t)\}|$. Item $q$ is in $u$'s top-$k$ at time $t$ iff $\text{rank}(u, q, t) \leq k$.
+
+\medskip
+\noindent\textbf{Definition 3 (Durability):}
+The durability of user $u$ with respect to query item $q$, threshold $k$, over interval $[t_b, t_e)$ is:
+\[
+  \text{dur}(u, q, k, [t_b, t_e)) = \frac{|\{t \in [t_b, t_e) : \text{rank}(u, q, t) \leq k\}|}{t_e - t_b}
+\]
+
+\medskip
+\noindent\textbf{Definition 4 (DRTop-$k$ Query):}
+$\text{DRTop-}k(q, k, \tau, [t_b, t_e)) = \{u \in \mathcal{U} : \text{dur}(u, q, k, [t_b, t_e)) \geq \tau\}$
+
+\section{Offline Phase: Data Preprocessing}
+
+\subsection{Rating Matrix Construction}
+
+Given raw interaction records $(u_i, q_i, r_i, t_i)$ where $u_i$ is a user, $q_i$ is an item, $r_i$ is a numerical rating, and $t_i$ is a Unix timestamp, we first map users and items to integer indices $\{0, \ldots, n_u - 1\}$ and $\{0, \ldots, n_i - 1\}$ respectively using category encoding. The sparse rating matrix $R \in \mathbb{R}^{n_u \times n_i}$ is constructed with $R[u, i] = r_{u,i}$ for observed ratings and 0 elsewhere (stored in CSR format using \texttt{scipy.sparse.csr\_matrix}).
+
+\subsection{SVD Factorization}
+
+We apply truncated SVD to the sparse matrix $R$ using \texttt{scipy.sparse.linalg.svds}:
+\[
+  R \approx \hat{U} \Sigma \hat{V}^\top
+\]
+where $\hat{U} \in \mathbb{R}^{n_u \times d}$, $\Sigma \in \mathbb{R}^{d \times d}$ (diagonal), $\hat{V} \in \mathbb{R}^{n_i \times d}$, and $d$ is the latent dimensionality. The user matrix $U = \hat{U} \Sigma^{1/2}$ and item matrix $S = \hat{V} \Sigma^{1/2}$ are computed by absorbing the singular values symmetrically. Both $U$ and $S$ are then $\ell_2$-normalized along the latent dimension so that dot-products approximate cosine similarity. This normalization is critical for the rank table construction to be meaningful across users.
+
+\subsection{Temporal User Preference Tensor Construction}
+
+The historical time span $[T_{\min}, T_{\max}]$ is divided into $L$ equal-width windows using \texttt{numpy.linspace}. For window $t$, the boundaries are $[T_t, T_{t+1})$. The temporal tensor $W \in \mathbb{R}^{n_u \times L \times d}$ is initialized to zero. For each rating $(u, i, r, t_{\text{unix}})$, we identify the window index $t = \lfloor L \cdot (t_{\text{unix}} - T_{\min}) / (T_{\max} - T_{\min}) \rfloor$ and accumulate the item latent vector:
+\[
+  W[u, t] \mathrel{+}= S[i]
+\]
+using \texttt{numpy.add.at} to correctly handle repeated $(u, t)$ indices. After accumulation, each $W[u, t]$ is divided by the number of items user $u$ rated in window $t$ to produce the average. Windows with no interactions fall back to the previous window's preference vector, or to the user's global average if all windows are empty.
+
+Figure~\ref{fig:windows} illustrates the temporal window construction.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[scale=1.0]
+  % Timeline
+  \draw[-{Stealth}] (0,0) -- (10.5,0) node[right] {Time};
+  \foreach \x/\lab in {0/$T_{\min}$, 2/$T_1$, 4/$T_2$, 6/$T_3$, 8/$T_4$, 10/$T_{\max}$} {
+    \draw (\x, -0.1) -- (\x, 0.1) node[above, font=\tiny] {\lab};
+  }
+  % Windows
+  \foreach \x/\c/\l in {0/blue!20/Window 0, 2/green!20/Window 1, 4/orange!20/Window 2, 6/purple!20/Window 3, 8/red!20/Window 4} {
+    \fill[\c, opacity=0.7] (\x, -0.6) rectangle (\x+2, -1.4);
+    \node[font=\tiny] at (\x+1, -1.0) {\l};
+  }
+  % Ratings (dots)
+  \foreach \xp/\yu in {0.3/u_1, 0.8/u_2, 1.5/u_1, 2.5/u_3, 3.0/u_1, 4.5/u_2, 5.5/u_3, 7.2/u_1, 8.8/u_2, 9.3/u_1} {
+    \fill[black] (\xp, 0) circle (1.5pt);
+  }
+  \node[font=\scriptsize] at (5.25, -2.0) {User interactions (dots) are aggregated per window to form $W[u, t]$};
+\end{tikzpicture}
+\caption{Temporal window construction. The time axis $[T_{\min}, T_{\max}]$ is divided into $L=5$ equal windows. User interactions within each window are averaged to produce $\mathbf{w}_{u,t}$.}
+\label{fig:windows}
+\end{figure}
+
+\section{Rank Table Construction}
+
+Computing $\text{rank}(u, q, t)$ exactly requires scoring all $n_i$ items for user $u$ at time $t$ and sorting---an $O(n_i)$ operation per (user, window) pair. For a candidate filter, we need a fast approximation.
+
+We pre-compute a \textit{rank table} $T \in \mathbb{R}^{n_u \times \tau_s}$ where $T[u, \ell]$ is the $\ell$-th largest preference score user $u$ assigns across all items in a single time window $t^*$ (typically the most recent window or a representative snapshot). The table is constructed using \texttt{numpy.partition} for efficiency:
+\begin{enumerate}
+  \item Compute all item scores for window $t^*$: $\text{scores}[u] = W[u, t^*] S^\top \in \mathbb{R}^{n_i}$.
+  \item Partition and sort to obtain the top-$\tau_s$ scores in decreasing order for each user.
+  \item Store as $T[u, :] = \text{sorted top-}\tau_s\text{ scores for user }u$.
+\end{enumerate}
+
+A companion table $\text{THR}[u, k-1]$ stores the $k$-th largest score (the boundary score for top-$k$ membership). Given a query item $q$ with score $\text{score}(u, q, t)$ at time $t$, we estimate the rank of $q$ for user $u$ using binary search on $T[u, :]$:
+\[
+  \hat{r}(u, q, t) = \text{searchsorted}(T[u], \text{score}(u, q, t), \text{side}=\text{'right'})
+\]
+This runs in $O(\log \tau_s)$ and provides a lower bound on the true rank.
+
+\section{DQR Candidate Filter}
+
+\subsection{Motivation}
+
+For a given query item $q$, users with very low preference scores for $q$ in most windows cannot possibly achieve durability $\geq \tau$. The DQR filter formalizes this intuition.
+
+\subsection{Durable Quantile Rank Definition}
+
+Let $\hat{r}(u, q, t)$ denote the estimated rank of item $q$ for user $u$ in window $t$ (computed from rank tables). Define the \textit{Durable Quantile Rank} of user $u$ with respect to query $q$ as:
+\[
+  \text{DQR}(u, q) = \hat{r}(u, q)_{(\lceil \tau \cdot L \rceil)}
+\]
+where $\hat{r}(u, q)_{(j)}$ denotes the $j$-th smallest rank estimate among all $L$ windows (i.e., the $\lceil \tau L \rceil$-th order statistic of the rank estimates). Intuitively, $\text{DQR}(u, q)$ is the rank that $q$ must achieve in the ``best'' $\lceil \tau L \rceil$ windows for user $u$ to be durable.
+
+\subsection{Pruning Rule}
+
+A user $u$ can \emph{only} be durable if $\text{DQR}(u, q) \leq k$. We relax this to $\text{DQR}(u, q) \leq c \cdot k$ (with $c \geq 1$) to compensate for rank estimation error and retain all true results with high probability. The candidate set is:
+\[
+  \mathcal{C} = \{u \in \mathcal{U} : \text{DQR}(u, q) \leq c \cdot k\}
+\]
+
+In practice, we sort users by their DQR score and select the top-$M$ (where $M = \lceil c \cdot k \rceil$ or an adaptive budget; see Section~\ref{sec:adaptive}).
+
+\subsection{DQR Filter Algorithm}
+
+Algorithm~\ref{alg:dqr} presents the DQR candidate filter.
+
+\begin{algorithm}[htbp]
+\SetAlgoLined
+\KwIn{Score matrix $\mathbf{F} \in \mathbb{R}^{n_u \times L}$ where $F[u,t] = \mathbf{w}_{u,t} \cdot \mathbf{s}_q$; durability $\tau$; relaxation $c$; threshold $k$; rank tables $T$}
+\KwOut{Candidate set $\mathcal{C}$}
+
+$r\_\text{req} \leftarrow \lceil \tau \cdot L \rceil$ \tcp{number of windows that must satisfy top-$k$}
+$M \leftarrow \lceil c \cdot k \rceil$ \tcp{maximum candidate rank}
+$\text{dqr}[\,] \leftarrow \infty$ \tcp{DQR scores for all users}
+
+\For{each user $u \in \{0, \ldots, n_u - 1\}$}{
+  \For{each window $t \in \{0, \ldots, L-1\}$}{
+    $\hat{r}_{u,t} \leftarrow \text{searchsorted}(T[u], F[u,t], \text{side=right})$ \tcp{estimated rank}
+  }
+  Sort $\{\hat{r}_{u,0}, \ldots, \hat{r}_{u,L-1}\}$ in ascending order\;
+  $\text{dqr}[u] \leftarrow \hat{r}_{u, r\_\text{req} - 1}$ \tcp{$r\_\text{req}$-th smallest rank}
+}
+$\mathcal{C} \leftarrow \{u : \text{dqr}[u] \leq M\}$\;
+\Return $\mathcal{C}$
+\caption{DQR Candidate Filter}
+\label{alg:dqr}
+\end{algorithm}
+
+The time complexity of the DQR filter is $O(n_u \cdot L \cdot \log \tau_s + n_u \cdot L \log L)$, dominated by the binary-search rank estimation step and the per-user sort over $L$ windows. Since $L$ and $\tau_s$ are small constants (typically 5 and 500), this reduces to $O(n_u)$ in practice.
+
+\section{Exact Verifiers: SSA and PRA}
+
+\subsection{Bitmap Construction}
+
+For each candidate user $u \in \mathcal{C}$, we compute the exact preference bitmap $h[u] \in \{0,1\}^L$:
+\[
+  h[u][t] = \begin{cases} 1 & \text{if } \text{rank}(u, q, t) \leq k \\ 0 & \text{otherwise} \end{cases}
+\]
+Computing $\text{rank}(u, q, t)$ exactly requires scoring all $n_i$ items for user $u$ in window $t$ to find the $k$-th largest score, then comparing $\text{score}(u, q, t)$ against it. This is done in a vectorized manner for all candidates simultaneously:
+\begin{enumerate}
+  \item For each window $t$: compute $\text{scores}[t] = W[\mathcal{C}, t] \cdot S^\top \in \mathbb{R}^{|\mathcal{C}| \times n_i}$.
+  \item Partition columns: $\text{kth}[t] = \text{scores}[t]_{(:, n_i - k)}$ (the $k$-th largest value per candidate).
+  \item $h[u][t] = 1$ if $\text{scores}[t][u, q] \geq \text{kth}[t][u]$, else 0.
+\end{enumerate}
+
+Bitmap values are then run-length encoded into a list of runs (start, end) where $h[u][t] = 1$ for all $t \in [\text{start}, \text{end})$.
+
+\subsection{Sweep Sort Algorithm (SSA)}
+
+Algorithm~\ref{alg:ssa} presents the SSA verifier.
+
+\begin{algorithm}[htbp]
+\SetAlgoLined
+\KwIn{Run-length encoded bitmap \texttt{runs}$[u]$ for each candidate $u \in \mathcal{C}$; query interval $[t_b, t_e)$; durability $\tau$}
+\KwOut{Durable users $\mathcal{D}$}
+$\text{req} \leftarrow \lceil \tau \cdot (t_e - t_b) \rceil$ \tcp{required active windows}
+$\mathcal{D} \leftarrow \emptyset$\;
+
+\For{each user $u \in \mathcal{C}$}{
+  $\text{count} \leftarrow 0$\;
+  \For{each run $(s, e)$ in \texttt{runs}$[u]$ sorted by $s$}{
+    $\text{overlap} \leftarrow \min(e, t_e) - \max(s, t_b)$\;
+    \If{$\text{overlap} > 0$}{$\text{count} \leftarrow \text{count} + \text{overlap}$}
+  }
+  \If{$\text{count} \geq \text{req}$}{$\mathcal{D} \leftarrow \mathcal{D} \cup \{u\}$}
+}
+\Return $\mathcal{D}$
+\caption{Sweep Sort Algorithm (SSA) Verifier}
+\label{alg:ssa}
+\end{algorithm}
+
+The SSA verifier runs in $O(|\mathcal{C}| \cdot n_{\text{runs}})$ where $n_{\text{runs}}$ is the average number of runs per user, which is bounded by $L$.
+
+\subsection{Priority Region Algorithm (PRA)}
+
+The PRA builds a forest of containment trees over the bitmap runs, where a run $[s_1, e_1)$ is a parent of $[s_2, e_2)$ if $[s_2, e_2) \subseteq [s_1, e_1)$. For a query $[t_b, t_e)$, DFS traversal over the forest allows early pruning: if the maximum possible overlap of a subtree with $[t_b, t_e)$ plus the already-accumulated count is less than $\text{req}$, the entire subtree is pruned.
+
+In practice, for $L = 5$, the PRA and SSA achieve similar performance (the forest depth is at most $L$). For larger $L$, PRA yields greater pruning benefit.
+
+\section{HyDART-RQ: The Hybrid Pipeline}
+\label{sec:hydart}
+
+Algorithm~\ref{alg:hydart} presents the complete HyDART-RQ pipeline.
+
+\begin{algorithm}[htbp]
+\SetAlgoLined
+\KwIn{$S$ (item matrix), $W$ (user tensor), query item $q$, params $k, \tau, c, [t_b, t_e)$, rank tables $T$}
+\KwOut{Durable users $\mathcal{D}$}
+\textbf{Phase 1: DQR Filtering}\\
+Compute score matrix $F[u, t] \leftarrow \mathbf{w}_{u,t} \cdot \mathbf{s}_q$ for all $u, t$\;
+$\mathcal{C} \leftarrow \text{DQR-Filter}(F, T, \tau, c, k)$ \tcp{Algorithm~\ref{alg:dqr}}
+
+\BlankLine
+\textbf{Phase 2: Exact Verification}\\
+Extract candidate tensor $W_\mathcal{C} \leftarrow W[\mathcal{C}, :, :]$\;
+\For{each window $t \in [t_b, t_e)$}{
+  $\text{all\_scores}[t] \leftarrow W_\mathcal{C}[:,t,:] \cdot S^\top$ \tcp{shape $|\mathcal{C}| \times n_i$}
+  $\text{kth}[t] \leftarrow$ $k$-th largest column value per row\;
+  $h[:, t] \leftarrow (\text{all\_scores}[t][:, q] \geq \text{kth}[t])$
+}
+Encode $h$ into run-length representations \texttt{runs}\;
+$\mathcal{D} \leftarrow \text{SSA-Verify}(\text{runs}, [t_b, t_e), \tau)$ \tcp{Algorithm~\ref{alg:ssa}}
+
+\Return $\mathcal{D}$
+\caption{HyDART-RQ: Hybrid Durable Approximate Reverse Top-$k$ Query}
+\label{alg:hydart}
+\end{algorithm}
+
+\subsection{Score Convention Correctness}
+
+A critical implementation requirement is that preference scores are \emph{larger-is-better}: a higher dot-product score $\mathbf{w}_{u,t} \cdot \mathbf{s}_q$ means user $u$ prefers item $q$ more strongly in window $t$. Consequently:
+\begin{itemize}
+  \item Top-$k$ membership: $q \in \text{top-}k(u, t)$ iff $\text{score}(u, q, t) \geq \text{score}(u, i_{(k)}, t)$ where $i_{(k)}$ is the $k$-th ranked item.
+  \item Bitmap: $h[u][t] = 1$ iff $\text{score}(u, q, t) \geq \text{kth-largest score for user }u\text{ in window }t$.
+  \item DQR estimation: rank is estimated as the number of items with scores \emph{greater than or equal} to $\text{score}(u, q, t)$.
+\end{itemize}
+
+An earlier implementation had the comparison inverted (``$\leq$ kth-smallest score''---a smaller-is-better convention appropriate for distance-based metrics). This caused the bitmap to flag windows where $q$ was least preferred, and the result set contained users who \emph{disliked} the query item. The correction was validated by eight unit tests covering edge cases (all windows active, no windows active, partial durability, tie-breaking). All tests pass after the fix.
+
+\section{Adaptive Candidate Budget}
+\label{sec:adaptive}
+
+On sparse datasets (e.g., Netflix with highly unequal interaction distributions), the fixed threshold $M = \lceil c \cdot k \rceil$ may yield a candidate set that is too small and misses some true durable users. We introduce an \textit{adaptive} extension:
+
+\begin{enumerate}
+  \item Sort all users by DQR score in ascending order.
+  \item Select the top-$\max(M, M_{\min})$ users, where $M_{\min}$ is a minimum budget hyperparameter (e.g., 200).
+  \item Optionally, add users within a \textit{boundary margin}: users whose DQR score is within $\delta$ of the $M$-th user's DQR score.
+\end{enumerate}
+
+This guarantees that even if the DQR estimates are noisy, a sufficient number of candidates enter the verification phase. The trade-off is a modest increase in candidate set size and verification time.
+
+\section{Complexity Analysis}
+
+Table~\ref{tab:complexity} summarizes the time complexity of each component.
+
+\begin{table}[htbp]
+\centering
+\caption{Time Complexity Analysis}
+\label{tab:complexity}
+\begin{tabular}{lll}
+\toprule
+\textbf{Component} & \textbf{Per-Query Complexity} & \textbf{Dominant Term} \\
+\midrule
+Rank table lookup (DQR) & $O(n_u \cdot L \cdot \log \tau_s)$ & $O(n_u)$ for fixed $L, \tau_s$ \\
+DQR sort per user & $O(n_u \cdot L \log L)$ & $O(n_u)$ for fixed $L$ \\
+Bitmap construction & $O(|\mathcal{C}| \cdot n_i)$ & $O(|\mathcal{C}| \cdot n_i)$ \\
+SSA verification & $O(|\mathcal{C}| \cdot L)$ & $O(|\mathcal{C}|)$ for fixed $L$ \\
+\midrule
+\textbf{Total HyDART-RQ} & $O(n_u + |\mathcal{C}| \cdot n_i)$ & $O(|\mathcal{C}| \cdot n_i)$ \\
+\textbf{Brute-Force SSA} & $O(n_u \cdot n_i)$ & $O(n_u \cdot n_i)$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Since $|\mathcal{C}| \ll n_u$ (pruning ratio $> 96\%$ in all experiments), HyDART-RQ achieves a speedup of approximately $n_u / |\mathcal{C}|$ over brute force, matching the observed 20--22$\times$ speedups in experiments.
+
+\section{Offline Pre-computation}
+
+The rank tables $T$ and the SVD factorization $S, U$ are computed once offline and stored as \texttt{.npy} binary files. For the three datasets, offline pre-computation takes between 30 seconds and 15 minutes depending on dataset size. All subsequent queries use the cached artifacts, making the online phase highly efficient.
+
+\section{Chapter Summary}
+
+This chapter presented the HyDART-RQ methodology in full detail. The key algorithmic innovation is the DQR filter, which reduces the per-query workload from $O(n_u \cdot n_i)$ to $O(|\mathcal{C}| \cdot n_i)$ by leveraging pre-computed rank tables to cheaply estimate user durability. The exact SSA/PRA verifiers ensure that surviving candidates are correctly classified as durable or non-durable. The score convention correction is essential for correctness. The following chapter presents the experimental evaluation of this pipeline.

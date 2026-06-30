@@ -1,0 +1,129 @@
+%----------------------------------------------------------------------------------------
+%	Chapter 2: Literature Review
+%----------------------------------------------------------------------------------------
+\chapter{Literature Review}
+\label{ch:literature}
+
+\section{Introduction}
+
+This chapter surveys the body of work related to the Durable Reverse Top-$k$ (DRTop-$k$) problem. The relevant literature spans four interconnected research areas: (1) reverse top-$k$ query processing, (2) temporal and durable query processing, (3) collaborative filtering and matrix factorization, and (4) continuous monitoring of top-$k$ queries. For each area, we review the most significant contributions, identify their limitations, and situate them relative to our problem.
+
+\section{Reverse Top-k Query Processing}
+
+\subsection{Reverse Nearest Neighbour Queries}
+
+The precursor to reverse top-$k$ queries is the \textit{reverse nearest neighbour (RNN)} query introduced by Korn and Muthukrishnan~\cite{korn2000influence}. An RNN query for a point $q$ in a metric space retrieves all data points that have $q$ as their nearest neighbour. Formally, the \textit{influence set} of $q$ is $\{p \in \mathcal{D} \mid \text{dist}(p, q) \leq \text{dist}(p, p') \text{ for all } p' \in \mathcal{D} \setminus \{p\}\}$. Applications include facility location, market analysis, and profile-based retrieval. The authors proposed exact and approximate algorithms based on pre-indexed Voronoi cells.
+
+Subsequent work generalised RNN to reverse $k$-nearest neighbour (R$k$NN) queries~\cite{tao2004reverse}: find all objects that have $q$ as one of their $k$ nearest neighbours. These queries are still distance-based and assume a metric space, which does not directly model user preference rankings. Nevertheless, the conceptual duality---reversing the query direction---is foundational to our work.
+
+\subsection{Reverse Top-k Queries}
+
+Vlachou et al.~\cite{vlachou2010reverse} introduced the \textit{monochromatic and bichromatic reverse top-$k$} queries as a generalisation of RNN to preference-based settings. In their formulation, preferences are modeled as linear utility functions over a multidimensional attribute space. The reverse top-$k$ query for a product $q$ retrieves all customers $u$ such that $q$ is among $u$'s top-$k$ preferred products. The utility function $f_u(\mathbf{x}) = \sum_j w_{u,j} x_j$ assigns each customer $u$ a weight vector $\mathbf{w}_u$ over the product attributes $\mathbf{x}$.
+
+Key contributions of~\cite{vlachou2010reverse} include:
+\begin{itemize}
+  \item An efficient algorithm exploiting the geometric structure of RT-$k$ regions in the weight vector space.
+  \item Index structures (R-trees) for pruning non-qualifying customers.
+  \item Distinction between monochromatic RT-$k$ (query from the same dataset) and bichromatic RT-$k$ (query item from a separate set).
+\end{itemize}
+
+Their setting, however, is entirely static: a single snapshot of customer weights is assumed. This does not accommodate the evolution of preferences over time.
+
+Wu et al.~\cite{wu2009finch} proposed FINCH, an alternative approach to evaluating reverse top-$k$ queries using a pre-built index structure called the Fused Inverted and Containment Hierarchical index. FINCH supports efficient incremental updates and significantly outperforms scan-based methods for large datasets. However, like Vlachou et al., FINCH operates under a static preference model.
+
+Vlachou et al.~\cite{vlachou2011monotone} extended reverse top-$k$ to monotone aggregate preference functions and proposed the VR-tree, a specialised index structure that prunes candidate customers based on dominance relationships. Again, the temporal dimension is absent.
+
+\subsection{Probabilistic and Uncertain Reverse Top-k}
+
+Lian and Chen~\cite{lian2010probabilistic} studied RT-$k$ queries over probabilistic databases, where attribute values are modeled as probability distributions. They introduced the concept of the reverse top-$k$ probability: $\Pr[q \in \text{top-}k(u)]$, and developed threshold-based algorithms to retrieve users whose RT-$k$ probability exceeds a given threshold. While this work incorporates uncertainty, it does not model the temporal evolution of preferences.
+
+\section{Temporal Preference Modeling}
+
+\subsection{Collaborative Filtering with Temporal Dynamics}
+
+Koren~\cite{koren2009temporal} showed empirically that user preferences drift over time in the Netflix Prize dataset. He proposed \textit{TimeSVD++}, a matrix factorization model that parameterizes item biases and user biases as functions of time:
+\[
+  \hat{r}_{ui}(t) = \mu + b_i(t) + b_u(t) + \mathbf{p}_u(t)^\top \mathbf{q}_i
+\]
+where $b_u(t)$ and $\mathbf{p}_u(t)$ model the temporal drift in user biases and preferences. TimeSVD++ achieved state-of-the-art RMSE on the Netflix Prize benchmark. While this work demonstrates the importance of temporal preference modeling, it does not address any form of reverse top-$k$ query.
+
+\subsection{Matrix Factorization for Recommendation}
+
+Koren, Bell, and Volinsky~\cite{koren2009matrix} provided a comprehensive survey of matrix factorization techniques for recommender systems. Singular Value Decomposition (SVD) decomposes the rating matrix $R \approx U \Sigma V^\top$, where user and item latent vectors capture latent preference dimensions. Their regularized SVD (biased MF) model:
+\[
+  \hat{r}_{ui} = \mu + b_u + b_i + \mathbf{p}_u^\top \mathbf{q}_i
+\]
+is the backbone of modern recommendation systems and forms the basis for the preference scoring in our work.
+
+Hu, Koren, and Volinsky~\cite{hu2008collaborative} extended MF to implicit feedback (clicks, views, purchases) using a weighted least-squares objective, where confidence weights $c_{ui} = 1 + \alpha r_{ui}$ amplify the signal from frequent interactions. This is particularly relevant for sparse datasets like Amazon Reviews.
+
+Sarwar et al.~\cite{sarwar2001item} proposed item-based collaborative filtering as a scalable alternative to user-based CF, exploiting item--item similarity instead of user--user similarity. While predating modern MF methods, item-based CF remains a strong baseline for sparse datasets.
+
+\section{Durable and Continuous Query Processing}
+
+\subsection{Continuous Top-k Monitoring over Sliding Windows}
+
+Mouratidis, Bakiras, and Papadias~\cite{mouratidis2006continuous} addressed the problem of continuously maintaining the top-$k$ result set as a sliding window of streaming data items moves. Their CATS algorithm uses cached partial results and incremental updates to avoid full re-evaluation of the top-$k$ on every window slide. Although this work targets top-$k$ (not reverse top-$k$) and a streaming setting (not offline temporal query processing), the concept of maintaining results across overlapping windows is related to the durability condition we impose.
+
+\subsection{Durable Top-k Queries}
+
+The notion of \textit{durability} in query results was formalised by Papapetrou and Pirrò~\cite{papapetrou2015durable}, who studied durable top-$k$ queries on temporal data. Their problem asks: over a timeline, find the objects that appear in the top-$k$ result for at least $\tau$ fraction of the time. They proposed a temporal index structure for efficient evaluation. The key difference from our work is the direction of the query: they retrieve items for a fixed user (top-$k$), whereas we retrieve users for a fixed item (reverse top-$k$). Adapting their index structures to the reverse direction is non-trivial because the candidate space is the set of users, not items.
+
+\subsection{Sweep Sort Algorithm and Priority Region Algorithm}
+
+The Sweep Sort Algorithm (SSA) \cite{mouratidis2006continuous} and Priority Region Algorithm (PRA) are temporal query processing techniques that operate on run-length encoded preference bitmaps. Given a bitmap $h[u][\cdot]$ where $h[u][t] = 1$ iff item $q$ ranks within top-$k$ for user $u$ at time $t$, the algorithms efficiently count the number of ``1'' runs (contiguous active windows) that overlap with a query interval $[t_b, t_e)$. The SSA performs a linear sweep over runs sorted by start time; the PRA builds a containment forest enabling DFS-based pruning of subtrees that cannot contribute sufficient duration. These algorithms serve as the \textit{verifiers} in our HyDART-RQ pipeline.
+
+\section{Dataset Benchmarks}
+
+\subsection{MovieLens Dataset}
+
+Harper and Konstan~\cite{harper2016movielens} documented the history and design of the MovieLens datasets, which have been central benchmarks in collaborative filtering research since 1997. The MovieLens 100K dataset contains 100{,}000 ratings from 943 users on 1{,}682 movies, while larger variants (1M, 10M, 25M) are available. The ratings include explicit timestamps, making MovieLens suitable for temporal preference analysis. We use the ML-100K variant due to its tractable size for controlled experiments.
+
+\subsection{Netflix Prize Dataset}
+
+Bennett and Lanning~\cite{bennett2007netflix} described the Netflix Prize competition (2006--2009), which released 100 million anonymous movie ratings from approximately 480{,}000 subscribers on nearly 18{,}000 movies. The scale and temporal richness of this dataset have made it a standard benchmark for large-scale collaborative filtering. We use a 5{,}000-user, 3{,}000-item subset extracted by selecting the most active users and most-rated items.
+
+\subsection{Amazon Reviews 2023}
+
+The Amazon Reviews 2023 dataset~\cite{hou2024bridging} is a large-scale collection of product reviews across multiple categories. We use the Video Games category (5-core filtered), which contains approximately 94{,}762 interactions from 4{,}716 users on 2{,}996 items after applying our medium-subset extraction procedure. The dataset spans the years 2000--2023, providing a long temporal horizon for multi-window analysis.
+
+\section{Research Gap Analysis}
+
+Table~\ref{tab:litreview} summarizes the key dimensions of related work and identifies where our contribution sits.
+
+\begin{table}[htbp]
+\centering
+\caption{Summary of Related Work and Research Gap}
+\label{tab:litreview}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Work} & \textbf{Query} & \textbf{Temporal} & \textbf{Durable} & \textbf{MF-based} & \textbf{Pruning} \\
+\midrule
+Korn \& Muthukrishnan~\cite{korn2000influence}    & Rev.\ NN        & \xmark & \xmark & \xmark & Voronoi \\
+Vlachou et al.~\cite{vlachou2010reverse}           & Rev.\ Top-$k$   & \xmark & \xmark & \xmark & R-tree \\
+Wu et al. (FINCH)~\cite{wu2009finch}               & Rev.\ Top-$k$   & \xmark & \xmark & \xmark & Index \\
+Vlachou et al.~\cite{vlachou2011monotone}          & Rev.\ Top-$k$   & \xmark & \xmark & \xmark & Dominance \\
+Lian \& Chen~\cite{lian2010probabilistic}          & Prob.\ RT-$k$   & \xmark & \xmark & \xmark & Threshold \\
+Koren~\cite{koren2009temporal}                     & Top-$k$         & \cmark & \xmark & \cmark & None \\
+Mouratidis et al.~\cite{mouratidis2006continuous}  & Top-$k$         & \cmark & \cmark & \xmark & Bitmap \\
+Papapetrou \& Pirrò~\cite{papapetrou2015durable}   & Dur.\ Top-$k$   & \cmark & \cmark & \xmark & Temporal idx \\
+\midrule
+\textbf{HyDART-RQ (ours)}                          & Dur.\ Rev.\ Top-$k$ & \cmark & \cmark & \cmark & DQR filter \\
+\bottomrule
+\multicolumn{6}{l}{\xmark~=~not addressed, \cmark~=~addressed}
+\end{tabular}
+\end{table}
+
+The table reveals a clear research gap: no existing work simultaneously addresses the reverse top-$k$ direction, temporal preference evolution, durability constraints, and matrix factorization-based preference modeling with a dedicated pruning strategy. Our HyDART-RQ framework fills precisely this gap.
+
+\section{Discussion}
+
+The existing literature provides important building blocks for our work: (1) the conceptual framework of reverse top-$k$ from~\cite{vlachou2010reverse}, (2) the temporal preference modeling via SVD from~\cite{koren2009matrix,koren2009temporal}, and (3) the SSA/PRA verifiers for bitmap-based durability checking inspired by~\cite{mouratidis2006continuous}. However, none of these threads have been combined into a single system targeting the DRTop-$k$ problem.
+
+The primary challenge of integrating these components is the \textit{score convention mismatch}: static RT-$k$ and durable top-$k$ literature uses geometric/distance-based metrics (smaller is better), whereas SVD dot-product scores are similarity-based (larger is better). This mismatch, if undetected, leads to completely inverted results---returning users who dislike the query item rather than those who like it. We identify this bug, trace it to the original bitmap-construction logic, and correct it as part of this thesis.
+
+\section{Chapter Summary}
+
+This chapter reviewed the literature across four areas relevant to the DRTop-$k$ problem. Static RT-$k$ methods are efficient but ignore temporal dynamics. Temporal CF models (TimeSVD++) capture preference drift but do not support reverse queries. Durable query processing methods handle duration but target forward top-$k$, not reverse top-$k$. No existing work combines all four dimensions. The following chapter presents our HyDART-RQ methodology that bridges these gaps.

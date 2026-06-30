@@ -1,0 +1,103 @@
+%----------------------------------------------------------------------------------------
+%	Appendix B: Additional Results and Dataset Details
+%----------------------------------------------------------------------------------------
+\chapter{Additional Results and Dataset Details}
+\label{appendix:results}
+
+\section{Full Method Comparison: Amazon Video Games (All 100 Queries)}
+
+Table~\ref{tab:amazon_full} presents the complete results for all methods evaluated on 100 query items from the Amazon Video Games dataset. This supplements the summary in Chapter 4.
+
+\begin{table}[htbp]
+\centering
+\caption{Full Method Comparison on Amazon Video Games}
+\label{tab:amazon_full}
+\footnotesize
+\begin{tabular}{lrrrrrr}
+\toprule
+\textbf{Method} & \textbf{Time (s)} & \textbf{Recall} & \textbf{Prec.} & \textbf{Exact} & \textbf{Pruning} & \textbf{Speedup} \\
+\midrule
+Full\_SSA                  & 1.1297 & --    & --    & --   & --     & 1.00$\times$ \\
+Full\_PRA                  & 1.1385 & --    & --    & --   & --     & -- \\
+Hybrid\_SSA\_GlobalAvg     & 0.0163 & 0.812 & 0.988 & 0.35 & 99.7\% & 69.1$\times$ \\
+Hybrid\_PRA\_GlobalAvg     & 0.0163 & 0.812 & 0.988 & 0.35 & 99.7\% & 69.4$\times$ \\
+Hybrid\_SSA\_UnionWin      & 0.0546 & 0.953 & 0.988 & 0.71 & 99.2\% & 20.7$\times$ \\
+Hybrid\_PRA\_UnionWin      & 0.0560 & 0.953 & 0.988 & 0.71 & 99.2\% & 20.2$\times$ \\
+Hybrid\_SSA\_DurableRank   & 0.0516 & 0.927 & 0.986 & 0.65 & 99.7\% & 21.9$\times$ \\
+Hybrid\_PRA\_DurableRank   & 0.0529 & 0.927 & 0.986 & 0.65 & 99.7\% & 21.4$\times$ \\
+LegacyMinRank SSA          & 0.3516 & 0.000 & 0.000 & 0.03 & 99.7\% & 3.2$\times$ \\
+LegacyMinRank PRA          & 0.3465 & 0.000 & 0.000 & 0.03 & 99.7\% & 3.3$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Dataset Download and Preprocessing Summary}
+
+\begin{table}[htbp]
+\centering
+\caption{Dataset Download and Preprocessing Details}
+\label{tab:download}
+\begin{tabular}{llll}
+\toprule
+\textbf{Dataset} & \textbf{Source} & \textbf{Download Method} & \textbf{Preprocessing} \\
+\midrule
+MovieLens 100K & GroupLens & Direct HTTP download & None required \\
+Netflix Prize  & Kaggle mirror & Manual download & CSR + SVD \\
+Amazon VG & HuggingFace & \texttt{HfFileSystem} + CSV & 5-core filter \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Amazon Video Games: 5-Core Filtering Statistics}
+
+The Amazon Video Games medium subset was obtained by the following pipeline:
+
+\begin{enumerate}
+  \item Started with the 5-core pre-filtered CSV from HuggingFace (\texttt{benchmark/5core/rating\_only/Video\_Games.csv}), containing 497{,}577 rows.
+  \item Selected top 5{,}000 most active users: reduced to 347{,}432 rows.
+  \item Selected top 3{,}000 most-rated items: reduced to 136{,}408 rows.
+  \item Applied 3 iterations of 5-core filtering (minimum 5 interactions per user and item): final size 94{,}762 rows, 4{,}716 users, 2{,}996 items.
+\end{enumerate}
+
+\begin{table}[htbp]
+\centering
+\caption{Amazon VG 5-Core Filtering Progress}
+\label{tab:amazon_filter}
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Step} & \textbf{Rows} & \textbf{Users} & \textbf{Items} & \textbf{Density} \\
+\midrule
+After top-5000 users & 347{,}432 & 5{,}000 & 3{,}000 & 2.32\% \\
+After top-3000 items & 136{,}408 & 4{,}836 & 3{,}000 & 0.94\% \\
+After 5-core iter 1  & 100{,}123 & 4{,}739 & 2{,}998 & 0.70\% \\
+After 5-core iter 2  &  94{,}998 & 4{,}718 & 2{,}997 & 0.67\% \\
+After 5-core iter 3  &  94{,}762 & 4{,}716 & 2{,}996 & 0.67\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Unit Test Suite Description}
+
+Table~\ref{tab:tests} describes the eight correctness unit tests used to validate the HyDART-RQ implementation after the score-convention correction.
+
+\begin{table}[htbp]
+\centering
+\caption{Unit Test Suite for HyDART-RQ Correctness}
+\label{tab:tests}
+\begin{tabular}{lll}
+\toprule
+\textbf{Test ID} & \textbf{Description} & \textbf{Expected Result} \\
+\midrule
+T1 & All windows active, $\tau=0.6$ & All users in result \\
+T2 & No windows active & Empty result \\
+T3 & Exactly $\tau$ fraction active & All eligible users in result \\
+T4 & One durable user, rest not & Exactly one user in result \\
+T5 & Query item rank=1 in all windows & All users returned (unless $k=0$) \\
+T6 & Query item rank=$k+1$ in all windows & Empty result \\
+T7 & Ties in preference scores (multiple items at same score) & Correct count with tie-breaking \\
+T8 & Partial interval $[1, L-1)$ & Only counts windows in interval \\
+\midrule
+\multicolumn{2}{l}{\textbf{All 8 tests pass after score-convention fix}} & \\
+\bottomrule
+\end{tabular}
+\end{table}

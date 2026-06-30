@@ -1,0 +1,120 @@
+%----------------------------------------------------------------------------------------
+%	Chapter 5: Societal, Health, Environment, Safety, Ethical, Legal and Cultural Issues
+%----------------------------------------------------------------------------------------
+\chapter{Societal, Health, Environment, Safety, Ethical, Legal and Cultural Issues}
+\label{ch:societal}
+
+\section{Introduction}
+
+The development and deployment of data-driven query systems such as HyDART-RQ carry responsibilities that extend beyond algorithmic correctness and computational efficiency. This chapter examines the broader implications of this research across societal, health, environmental, safety, ethical, legal, and cultural dimensions. Awareness of these implications is integral to responsible engineering practice.
+
+\section{Societal Impact}
+
+\subsection{Enabling Fairer Recommendation Ecosystems}
+
+Traditional top-$k$ recommendation systems tend to amplify popularity bias, systematically under-recommending niche items and disadvantaging minority content producers. Reverse top-$k$ queries complement this by helping content creators identify their genuine audience---even for niche items---without relying on aggregate popularity metrics. A documentary filmmaker, for instance, can use DRTop-$k$ to identify users who have \emph{consistently} shown interest in similar content, enabling targeted outreach without mass marketing.
+
+\subsection{Supporting Digital Inclusion}
+
+HyDART-RQ operates on latent preference models derived from interaction histories. Users with sparse histories (e.g., occasional users, elderly users, users from developing regions with limited internet access) may be less accurately represented in the temporal tensor $W$. This can create disparate performance: recall may be lower for items preferred primarily by underrepresented user segments. System designers should be aware of this limitation and consider supplementary data sources or fallback strategies (e.g., demographic-based preference imputation) for underrepresented populations.
+
+\subsection{Commercial and Economic Impact}
+
+DRTop-$k$ queries have direct applications in e-commerce analytics, content monetization, and targeted advertising. While this creates economic value, it also raises concerns about data commodification: user behavioral data, processed to identify loyal customers, may be exploited in ways users did not consent to when providing ratings. Platform operators should ensure that query results are used only for purposes aligned with the users' original data-sharing expectations.
+
+\section{Health and Safety Considerations}
+
+\subsection{Psychological Safety}
+
+Persistent preference profiling can contribute to filter bubbles---echo chambers where users are repeatedly shown content aligned with their established preferences, limiting exposure to diverse viewpoints. HyDART-RQ, by identifying users who consistently prefer specific items across multiple time windows, could inadvertently facilitate the construction of narrower preference profiles. Recommendation system designers using DRTop-$k$ outputs should consider diversity injection mechanisms to counteract filter bubble effects.
+
+\subsection{Recommendation System Safety}
+
+In healthcare or safety-critical applications (e.g., medical treatment preference analysis, pharmaceutical recommendation), the accuracy of DRTop-$k$ results has direct health implications. A false negative (missed durable user) in a drug interaction alert system could mean a patient fails to receive a critical notification. In such contexts, the adaptive budget should be set conservatively (large $M_{\min}$, high $c$) to maximize recall, even at the cost of efficiency.
+
+\section{Environmental Considerations}
+
+\subsection{Computational Energy Consumption}
+
+The offline preprocessing phase of HyDART-RQ, particularly the SVD factorization of large sparse matrices, is computationally intensive. For datasets with millions of users and items, SVD may require significant CPU time and memory. Energy-efficient computing practices should be considered:
+\begin{itemize}
+  \item Schedule batch preprocessing during off-peak hours when renewable energy is more available.
+  \item Use approximate SVD methods (e.g., randomized SVD) to reduce computation while maintaining latent factor quality.
+  \item Cache and reuse factorizations across multiple query sessions to amortize the one-time cost.
+\end{itemize}
+
+In this thesis, all experiments were conducted on a single laptop without GPU acceleration, with a total electricity consumption estimated to be less than 0.1 kWh for all experiments, which is negligible from an environmental standpoint.
+
+\subsection{Data Storage}
+
+The rank tables and temporal tensors require storage proportional to $O(n_u \cdot \tau_s)$ and $O(n_u \cdot L \cdot d)$ respectively. For $n_u = 5{,}000$, $L=5$, $d=32$, $\tau_s=500$, the total storage is approximately $5{,}000 \times (500 + 160) \times 4 \approx 13$ MB---negligible on modern storage systems. At scale ($n_u = 10^6$), storage grows to $\sim 2.6$ GB, which should be accounted for in system design.
+
+\section{Safety Considerations in System Deployment}
+
+\subsection{Query Result Integrity}
+
+Any system deploying HyDART-RQ must ensure the integrity of query results. The score-convention bug identified in this thesis illustrates that software defects in preference systems can yield completely inverted results---returning users who dislike an item instead of those who like it. In commercial deployments, such errors could result in:
+\begin{itemize}
+  \item Wasted marketing spend targeting the wrong users.
+  \item User annoyance from irrelevant recommendations.
+  \item Reputational damage to the platform.
+\end{itemize}
+
+Comprehensive testing (as demonstrated by the 8-unit-test suite in this work) and regular regression testing against known ground-truth queries are essential safety measures.
+
+\subsection{System Availability}
+
+For production deployments, the offline pre-computation (rank tables, SVD) represents a single point of failure: if the pre-computed artifacts are corrupted or outdated, all queries degrade to brute force. Periodic integrity checks and redundant storage of pre-computed artifacts mitigate this risk.
+
+\section{Ethical Considerations}
+
+\subsection{User Privacy and Consent}
+
+HyDART-RQ processes individual-level rating histories to identify which users prefer which items. Even when ratings are anonymized, temporal preference patterns can be re-identifying. The Netflix Prize dataset was famously de-anonymized by Narayanan and Shmatikoff~\cite{narayanan2008robust} by cross-referencing with IMDb reviews, demonstrating that temporal interaction data carries significant re-identification risk.
+
+Responsible deployment requires:
+\begin{itemize}
+  \item \textbf{Differential privacy}: Adding calibrated noise to SVD outputs to prevent inference of individual ratings while preserving aggregate preference patterns.
+  \item \textbf{Data minimization}: Processing only the interaction data necessary for the query; not storing raw temporal profiles longer than needed.
+  \item \textbf{Informed consent}: Users should be aware that their interaction history is used to identify them as potential targets for specific items or campaigns.
+\end{itemize}
+
+\subsection{Algorithmic Fairness}
+
+The DQR filter may exhibit disparate recall performance across demographic groups if preference patterns differ systematically by group. For example, if users from certain geographic regions or age groups interact less frequently with the platform, their temporal tensors are noisier, leading to less accurate DQR estimates and lower recall for items preferred by those groups. Fairness-aware extensions of HyDART-RQ could include group-specific minimum candidate budgets or fairness constraints on the candidate selection step.
+
+\subsection{Transparency and Explainability}
+
+The latent factor model underlying HyDART-RQ is not directly interpretable: a user's preference vector in $\mathbb{R}^{32}$ does not have semantic meaning in isolation. When query results are used to inform business decisions (e.g., selecting users for a marketing campaign), stakeholders may rightly ask ``why was this user selected?'' Providing explanations (e.g., ``this user rated 8 products similar to item $q$ in the past 3 years'') requires additional layers of explanation beyond the raw DRTop-$k$ result.
+
+\section{Legal Considerations}
+
+\subsection{Data Protection Regulations}
+
+Processing user rating histories for DRTop-$k$ queries falls under data protection regulations in multiple jurisdictions:
+\begin{itemize}
+  \item \textbf{GDPR (EU)}: Requires lawful basis for processing personal data, the right to access, correct, and erase personal data, and impact assessments for high-risk processing.
+  \item \textbf{CCPA (California)}: Grants consumers the right to know, delete, and opt out of the sale of personal information.
+  \item \textbf{PDPA (Bangladesh)}: Bangladesh is developing a Personal Data Protection Act; compliance with emerging regulations should be anticipated.
+\end{itemize}
+
+In this thesis, all experiments were conducted on publicly released benchmark datasets (MovieLens, Netflix Prize, Amazon Reviews 2023) that do not contain personally identifiable information in their released forms.
+
+\subsection{Intellectual Property}
+
+The algorithms (SSA, PRA) and datasets used in this work are from published academic literature and openly licensed datasets. No proprietary algorithms or datasets were used without appropriate attribution. All dataset licenses permit academic research use.
+
+\section{Cultural Considerations}
+
+\subsection{Cross-Cultural Preference Variation}
+
+Preference patterns vary significantly across cultures. A video game highly ranked by users in one country may be irrelevant in another due to language, cultural context, or age-rating differences. HyDART-RQ's preference model, learned from aggregate ratings, implicitly encodes the cultural biases of the dominant user demographic in the dataset. Cross-cultural deployments should consider:
+\begin{itemize}
+  \item Training separate models per cultural region.
+  \item Including cultural metadata as additional latent dimensions.
+  \item Evaluating DRTop-$k$ recall separately for distinct cultural user segments.
+\end{itemize}
+
+\section{Chapter Summary}
+
+This chapter has examined the broader implications of HyDART-RQ from multiple non-technical perspectives. Key takeaways are: (1) user privacy must be protected through differential privacy and data minimization; (2) fairness considerations require monitoring recall across user demographic groups; (3) the score-convention bug illustrates that safety testing is essential for recommendation systems; and (4) legal compliance with data protection regulations must guide any production deployment. Responsible deployment of DRTop-$k$ systems requires integrating these considerations into the system design from the outset.

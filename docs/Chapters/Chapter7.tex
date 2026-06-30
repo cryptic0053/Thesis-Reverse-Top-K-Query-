@@ -1,0 +1,68 @@
+%----------------------------------------------------------------------------------------
+%	Chapter 7: Conclusions
+%----------------------------------------------------------------------------------------
+\chapter{Conclusions}
+\label{ch:conclusions}
+
+\section{Summary of the Work}
+
+This thesis addressed the Durable Reverse Top-$k$ (DRTop-$k$) query problem: given a query item $q$, find all users who have consistently ranked $q$ within their top-$k$ preferred items across at least $\tau$ fraction of $L$ time windows. This problem sits at the intersection of reverse top-$k$ query processing and temporal preference modeling, and has clear practical utility for content publishers, e-commerce platforms, and marketers who need to identify loyal user segments for a specific item.
+
+The main contribution is \textbf{HyDART-RQ} (Hybrid Durable Approximate Reverse Top-$k$ Query), a two-phase framework that:
+\begin{enumerate}
+  \item Models user preferences via SVD-based matrix factorization, constructing a temporal user preference tensor $W \in \mathbb{R}^{n_u \times L \times d}$ from timestamped rating data.
+  \item Applies the \textbf{Durable Quantile Rank (DQR) filter} to prune up to 99.7\% of users before any expensive computation, using pre-built rank tables for $O(\log \tau_s)$ rank estimation per (user, window) pair.
+  \item Verifies the small surviving candidate set exactly using the \textbf{Sweep Sort Algorithm (SSA)} or \textbf{Priority Region Algorithm (PRA)} on run-length encoded preference bitmaps.
+  \item Optionally applies an \textbf{adaptive candidate budget} ($M_{\min}$) to guarantee recall robustness on datasets with skewed result-set sizes.
+\end{enumerate}
+
+A critical \textbf{score-convention bug}---an inverted comparison direction in the bitmap construction that caused 0\% recall---was identified through systematic unit testing, corrected, and validated across all three datasets.
+
+Experimental evaluation on three real-world datasets demonstrated:
+\begin{itemize}
+  \item \textbf{MovieLens 100K}: Recall = 1.00, Pruning = 96.7\%.
+  \item \textbf{Netflix Prize (adaptive)}: Recall = 1.00, Speedup = 20.3$\times$, Pruning = 96.0\%.
+  \item \textbf{Amazon Video Games}: Recall = 0.927, Speedup = 21.9$\times$, Pruning = 99.7\%.
+\end{itemize}
+
+All six thesis objectives (stated in Chapter 1) were fully achieved.
+
+\section{Key Contributions}
+
+\begin{enumerate}
+  \item \textbf{DRTop-$k$ problem formalization}: The first formal treatment of durable reverse top-$k$ queries within a latent factor preference framework.
+  \item \textbf{DQR filter}: A novel, efficient candidate pruning mechanism based on quantile rank estimation from pre-built lookup tables.
+  \item \textbf{Score-convention correction}: Identification and documentation of a critical implementation defect with broad applicability to any system combining distance-based temporal algorithms with similarity-based latent factor models.
+  \item \textbf{Adaptive candidate budget}: A practical mechanism for robustifying recall on datasets with high variability in result-set sizes.
+  \item \textbf{Multi-dataset evaluation framework}: A reusable Python codebase supporting end-to-end evaluation of DRTop-$k$ methods on diverse datasets.
+\end{enumerate}
+
+\section{Limitations}
+
+\begin{enumerate}
+  \item \textbf{Approximate recall on sparse data}: HyDART-RQ achieves only 92.7\% recall on the Amazon Video Games dataset (without adaptive budget) due to inaccurate DQR estimates arising from sparse temporal interactions.
+  \item \textbf{Static rank tables}: Rank tables are computed from a single representative window. For datasets with strong temporal drift, separate rank tables per window would be more accurate but require $L\times$ more storage and $L\times$ more pre-computation.
+  \item \textbf{SVD limitation}: Truncated SVD of a static rating matrix does not capture user preference dynamics directly; each window's tensor slice $W[:,t,:]$ is derived by averaging item vectors from the static SVD, not from a temporally-aware factorization like TimeSVD++.
+  \item \textbf{Scalability}: The current implementation holds $W$ and $S$ fully in RAM. For datasets with $n_u > 100{,}000$, memory-mapped arrays or distributed processing would be required.
+  \item \textbf{Binary durability}: The current model counts windows where $q$ is in the top-$k$ as a binary indicator. A graded durability model (weighting recent windows more heavily) might be more reflective of actual user loyalty.
+  \item \textbf{Fixed time windows}: Equal-width windows may not align with natural preference transition points (e.g., monthly patterns, seasonal trends). Adaptive window segmentation is left for future work.
+\end{enumerate}
+
+\section{Future Work}
+
+Building on the limitations identified above, several promising research directions emerge:
+
+\begin{enumerate}
+  \item \textbf{Temporally-aware factorization}: Integrate TimeSVD++ or time-aware tensor factorization (TATF) to learn per-window user embeddings directly, replacing the averaged-item-vector approach for $W$.
+  \item \textbf{Window-specific rank tables}: Compute separate rank tables $T_t$ for each window $t$ to improve DQR accuracy, with compression techniques (e.g., rank-quantile sketches) to manage storage.
+  \item \textbf{Online/streaming DRTop-$k$}: Extend HyDART-RQ to the streaming setting, where new ratings arrive continuously and query results must be maintained incrementally using the CATS-like framework~\cite{mouratidis2006continuous}.
+  \item \textbf{Fairness-aware DQR}: Add demographic parity or equalized opportunity constraints to the DQR filter to ensure balanced recall across user groups.
+  \item \textbf{Neural preference models}: Replace SVD with neural collaborative filtering (NCF) or transformer-based sequential models, and adapt the DQR filter to work with neural score distributions.
+  \item \textbf{Privacy-preserving HyDART-RQ}: Incorporate differential privacy mechanisms (e.g., Gaussian mechanism on SVD singular vectors) to enable privacy-safe DRTop-$k$ query processing.
+  \item \textbf{Distributed implementation}: Scale HyDART-RQ to datasets with millions of users using distributed data processing frameworks (Apache Spark, Dask), with the DQR filter implemented as a map-reduce operation.
+  \item \textbf{Benchmark and open-source release}: Package HyDART-RQ as an open-source library with a standardized benchmark suite covering 10+ datasets of varying scale and sparsity.
+\end{enumerate}
+
+\section{Closing Remarks}
+
+This thesis demonstrates that the DRTop-$k$ problem, while seemingly complex, is tractable with the right combination of pre-computation (rank tables), smart filtering (DQR), and exact verification (SSA/PRA). The 20--22$\times$ speedups achieved on real datasets, combined with high recall, suggest that HyDART-RQ is a practically viable approach for temporal preference mining. The score-convention bug discovered and corrected during this work serves as a reminder that algorithm correctness must never be assumed---systematic testing is indispensable in research-grade software engineering. We hope this work provides a solid foundation for future research at the intersection of temporal databases and collaborative filtering.

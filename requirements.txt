@@ -1,0 +1,7 @@
+pandas
+numpy
+pyarrow
+huggingface_hub
+tqdm
+scikit-learn
+scipy

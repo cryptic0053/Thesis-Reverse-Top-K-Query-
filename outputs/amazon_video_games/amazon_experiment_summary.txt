@@ -1,0 +1,60 @@
+================================================================
+  HyDART-RQ Amazon Video Games Experiment Summary
+================================================================
+
+Dataset
+  Name         : Amazon Reviews 2023 - Video Games
+  Path         : D:\4-1\Lab\CSE 4000 Project  Thesis\thesis_project\data\raw\amazon_video_games\amazon_video_games_medium.csv
+  Total rows   : 94,762
+  Users        : 4,716
+  Items        : 2,996
+  Year range   : 2000 - 2023
+
+Experiment Parameters
+  latent_dim   : 32
+  k            : 10
+  tau          : 0.6
+  c            : 1.5
+  time_windows : 5
+  query_items  : 100
+  seed         : 42
+
+Query Statistics
+  Non-empty baseline : 97/100 queries
+  Empty baseline     : 3/100 queries
+  Avg durable users  : 9.84 per query
+
+Method Performance (averages over all queries)
+  Full_SSA                       time=1.1297s  rec=N/A  prec=N/A  pruning=N/A  exact=N/A  speedup=1.00x
+  Full_PRA                       time=1.1385s  rec=N/A  prec=N/A  pruning=N/A  exact=N/A  speedup=N/A
+  Hybrid_SSA_GlobalAvg           time=0.0163s  rec=0.8121  prec=0.9878  pruning=0.9968  exact=0.3500  speedup=69.12x
+  Hybrid_PRA_GlobalAvg           time=0.0163s  rec=0.8121  prec=0.9878  pruning=0.9968  exact=0.3500  speedup=69.41x
+  Hybrid_SSA_UnionWin            time=0.0546s  rec=0.9531  prec=0.9877  pruning=0.9923  exact=0.7100  speedup=20.68x
+  Hybrid_PRA_UnionWin            time=0.0560s  rec=0.9531  prec=0.9877  pruning=0.9923  exact=0.7100  speedup=20.17x
+  Hybrid_SSA_DurableRank         time=0.0516s  rec=0.9271  prec=0.9861  pruning=0.9968  exact=0.6500  speedup=21.90x
+  Hybrid_PRA_DurableRank         time=0.0529s  rec=0.9271  prec=0.9861  pruning=0.9968  exact=0.6500  speedup=21.36x
+  Hybrid_SSA_LegacyMinRank       time=0.3516s  rec=0.0000  prec=0.0000  pruning=0.9968  exact=0.0300  speedup=3.21x
+  Hybrid_PRA_LegacyMinRank       time=0.3465s  rec=0.0000  prec=0.0000  pruning=0.9968  exact=0.0300  speedup=3.26x
+
+HyDART-RQ (Hybrid_SSA_DurableRank) Key Metrics
+  Avg time           : 0.0516s
+  Speedup vs SSA     : 21.90x
+  Avg recall         : 0.9271
+  Avg pruning ratio  : 0.9968
+  Candidate reduction: 0.9968
+  Avg candidates     : 15.0 / 4716 users
+
+Output Files
+  D:\4-1\Lab\CSE 4000 Project  Thesis\thesis_project\outputs\amazon_video_games\amazon_static_results.csv
+  D:\4-1\Lab\CSE 4000 Project  Thesis\thesis_project\outputs\amazon_video_games\amazon_temporal_results.csv
+  D:\4-1\Lab\CSE 4000 Project  Thesis\thesis_project\outputs\amazon_video_games\amazon_hydart_rq_results.csv
+  D:\4-1\Lab\CSE 4000 Project  Thesis\thesis_project\outputs\amazon_video_games\amazon_summary.csv
+  D:\4-1\Lab\CSE 4000 Project  Thesis\thesis_project\outputs\amazon_video_games\amazon_experiment_summary.txt
+
+Observations
+  HyDART-RQ achieves 21.9x speedup over brute-force SSA with 0.9271 recall on Amazon Video Games.
+  The durable-quantile candidate filter reduces the user space by 99.7%, examining only 15 of 4716 users.
+  With tau=0.6 and L=5, 97 of 100 sampled items have at least one durable user in their reverse top-10.
+
+Total experiment runtime : 444.1s
+================================================================

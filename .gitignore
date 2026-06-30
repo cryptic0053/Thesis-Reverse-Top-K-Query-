@@ -1,5 +1,6 @@
 # Python
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *.pyo
 *.pyd
@@ -13,26 +14,21 @@ build/
 venv/
 env/
 .venv/
-.env/
+.env
 
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb
 
-# Large Netflix raw data (files 444MB–530MB each — exceed GitHub 100MB limit)
-data/raw/Netflix/combined_data_1.txt
-data/raw/Netflix/combined_data_2.txt
-data/raw/Netflix/combined_data_3.txt
-data/raw/Netflix/combined_data_4.txt
-data/raw/Netflix/qualifying.txt
-data/raw/Netflix/probe.txt
+# Raw data — all large source datasets (never commit to GitHub)
+data/raw/
 
-# Large processed data (229MB — exceeds GitHub 100MB limit)
+# Known oversized generated artifact (229MB — exceeds GitHub's 100MB hard limit)
 data/processed/netflix/ratings_subset.csv
 
-# Generated binary artifacts
-outputs/*.npy
-data/processed/**/*.npy
+# Other large/binary generated artifacts not needed in version control
+*.parquet
+*.gz
 
 # OS
 .DS_Store
